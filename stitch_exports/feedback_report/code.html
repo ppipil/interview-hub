@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Interview Feedback - InterviewAI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#e0e0ff",
+                    "on-surface-variant": "#45464d",
+                    "primary": "#000000",
+                    "on-error-container": "#93000a",
+                    "on-primary-container": "#7c839b",
+                    "background": "#f7f9fb",
+                    "on-secondary-fixed-variant": "#3323cc",
+                    "on-tertiary-container": "#6f7ae5",
+                    "surface-bright": "#f7f9fb",
+                    "inverse-surface": "#2d3133",
+                    "primary-fixed": "#dae2fd",
+                    "on-error": "#ffffff",
+                    "primary-fixed-dim": "#bec6e0",
+                    "on-background": "#191c1e",
+                    "secondary-container": "#645efb",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#bdc2ff",
+                    "on-surface": "#191c1e",
+                    "error": "#ba1a1a",
+                    "secondary-fixed-dim": "#c3c0ff",
+                    "surface-dim": "#d8dadc",
+                    "outline": "#76777d",
+                    "on-tertiary-fixed": "#000767",
+                    "on-secondary-container": "#fffbff",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container-high": "#e6e8ea",
+                    "surface-container-lowest": "#ffffff",
+                    "outline-variant": "#c6c6cd",
+                    "surface-container": "#eceef0",
+                    "surface-container-low": "#f2f4f6",
+                    "on-tertiary-fixed-variant": "#2f3aa3",
+                    "secondary": "#4b41e1",
+                    "on-primary-fixed": "#131b2e",
+                    "surface-container-highest": "#e0e3e5",
+                    "surface": "#f7f9fb",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "tertiary-container": "#000767",
+                    "surface-variant": "#e0e3e5",
+                    "tertiary": "#000000",
+                    "primary-container": "#131b2e",
+                    "surface-tint": "#565e74",
+                    "secondary-fixed": "#e2dfff",
+                    "inverse-primary": "#bec6e0",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "on-secondary-fixed": "#0f0069"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface">
+<header class="bg-white dark:bg-[#0F172A] docked full-width top-0 z-50 sticky">
+<div class="flex items-center justify-between px-6 py-4 w-full max-w-7xl mx-auto">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#4B41E1] dark:text-[#645EFB]" style="font-size: 24px;">graphic_eq</span>
+<span class="text-xl font-extrabold text-[#0F172A] dark:text-white font-manrope tracking-tight">InterviewAI</span>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex gap-8 items-center">
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-2 rounded-lg" href="#">Dashboard</a>
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-2 rounded-lg" href="#">Start Session</a>
+<a class="text-[#4B41E1] font-bold font-manrope text-sm px-3 py-2" href="#">History</a>
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-2 rounded-lg" href="#">Insights</a>
+</nav>
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="professional portrait of a young man with a friendly expression in a corporate setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyX2NdJ47fqP2uhu5yD-eChketiNNAQB7e5dYsJb7tC1e6K3DFs-d19P3oE6HQgkffP9YhAguYQcUtHYReS2yTtrAk6iBgnI886jiaM47X8lrHNKLN-XfcsGgAO0I7XRrU6j52B9LKpmeITUTqcsZwMtcAXpSYvvVA3Y0xVKFX5290_VdCnq6wvPFc5Fm_LOMAEMm1p3A2MZUrSefrLY-cmip0l4445HMYiSSnlZSVHHn2iKGvpVGw4zCU34zjrA2VE5Jv_vRznQY"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-4xl mx-auto px-6 py-12">
+<div class="mb-12 text-center">
+<span class="label-md text-on-surface-variant tracking-widest uppercase text-xs font-bold mb-3 block">Performance Report</span>
+<h1 class="text-4xl md:text-5xl font-extrabold text-primary tracking-tight mb-4">Interview Feedback</h1>
+<div class="h-1.5 w-24 bg-gradient-to-r from-secondary to-secondary-container mx-auto rounded-full"></div>
+</div>
+<section class="space-y-8">
+<div class="bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10">
+<div class="flex items-start gap-4 mb-6">
+<div class="bg-secondary/10 p-3 rounded-lg">
+<span class="material-symbols-outlined text-secondary">analytics</span>
+</div>
+<div>
+<h2 class="text-xl font-bold text-on-surface mb-1">Executive Summary</h2>
+<p class="text-on-surface-variant leading-relaxed">
+                            Your overall performance demonstrated a strong grasp of the fundamental technical requirements for the role. However, while your enthusiasm was evident, some responses lacked the structural depth needed to convey seniority. Refined delivery with a focus on quantifiable outcomes will significantly elevate your candidacy.
+                        </p>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-container-low p-6 rounded-xl space-y-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<h3 class="font-bold text-sm uppercase tracking-wider text-on-surface-variant">Focus Areas</h3>
+</div>
+<ul class="space-y-4">
+<li class="flex gap-3 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary mt-2 shrink-0"></span>
+<span class="text-sm font-medium text-on-surface">Be more specific with technical examples</span>
+</li>
+<li class="flex gap-3 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary mt-2 shrink-0"></span>
+<span class="text-sm font-medium text-on-surface">Structure your answer using STAR</span>
+</li>
+<li class="flex gap-3 items-start">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary mt-2 shrink-0"></span>
+<span class="text-sm font-medium text-on-surface">Focus more on the 'Result' aspect</span>
+</li>
+</ul>
+</div>
+<div class="md:col-span-2 bg-surface-container-lowest p-8 rounded-xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-secondary">lightbulb</span>
+<h2 class="text-xl font-bold text-on-surface">Suggested Better Answer</h2>
+</div>
+<div class="bg-surface-container p-6 rounded-lg relative">
+<span class="absolute -top-3 left-6 px-3 py-1 bg-secondary text-white text-[10px] font-bold uppercase tracking-tighter rounded-full">Recommended Response</span>
+<p class="text-on-surface leading-relaxed text-sm italic">
+                            "In my previous role at TechFlow, I encountered a critical database bottleneck that increased latency by 40%. Using the STAR method: I analyzed query patterns (Situation/Task), implemented a Redis caching layer and optimized SQL indexing (Action). As a result, we reduced page load times by 65% and improved concurrent user capacity by 3x within two weeks (Result)."
+                        </p>
+</div>
+</div>
+</div>
+<div class="bg-primary-container text-white p-8 rounded-xl overflow-hidden relative">
+<div class="relative z-10">
+<h3 class="text-2xl font-bold mb-2">Ready to refine?</h3>
+<p class="text-on-primary-container text-sm max-w-md mb-8">
+                        Consistency is key to mastering the interview process. Apply these feedback points in a fresh session to track your growth.
+                    </p>
+<div class="flex flex-col sm:flex-row gap-4">
+<button class="bg-gradient-to-r from-secondary to-secondary-container text-white px-8 py-3 rounded-md font-bold text-sm transition-transform active:scale-95 hover:shadow-lg hover:shadow-secondary/20">
+                            Practice Again
+                        </button>
+<button class="bg-white/10 backdrop-blur-md text-white px-8 py-3 rounded-md font-bold text-sm transition-colors hover:bg-white/20">
+                            Back to Home
+                        </button>
+</div>
+</div>
+<div class="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-secondary/20 rounded-full blur-3xl"></div>
+<div class="absolute bottom-0 left-0 -ml-8 -mb-8 w-32 h-32 bg-secondary/10 rounded-full blur-2xl"></div>
+</div>
+</section>
+</main>
+<footer class="mt-20 pb-12 border-t border-outline-variant/10 pt-12">
+<div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="flex items-center gap-2 opacity-50">
+<span class="material-symbols-outlined text-primary">graphic_eq</span>
+<span class="text-lg font-extrabold text-primary font-manrope tracking-tight">InterviewAI</span>
+</div>
+<p class="text-on-surface-variant text-sm">© 2024 InterviewAI. Precision Prep for Professionals.</p>
+<div class="flex gap-6">
+<a class="text-on-surface-variant hover:text-secondary transition-colors text-sm font-medium" href="#">Privacy</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors text-sm font-medium" href="#">Terms</a>
+<a class="text-on-surface-variant hover:text-secondary transition-colors text-sm font-medium" href="#">Support</a>
+</div>
+</div>
+</footer>
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-outline-variant/10 z-50">
+<div class="flex justify-around items-center py-3">
+<a class="flex flex-col items-center gap-1 text-slate-600" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-bold">Dashboard</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-600" href="#">
+<span class="material-symbols-outlined">settings_voice</span>
+<span class="text-[10px] font-bold">Start</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-[#4B41E1]" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">history</span>
+<span class="text-[10px] font-bold">History</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-600" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-[10px] font-bold">Insights</span>
+</a>
+</div>
+</nav>
+</body></html>

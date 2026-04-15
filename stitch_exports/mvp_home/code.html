@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#e0e0ff",
+                    "on-surface-variant": "#45464d",
+                    "primary": "#000000",
+                    "on-error-container": "#93000a",
+                    "on-primary-container": "#7c839b",
+                    "background": "#f7f9fb",
+                    "on-secondary-fixed-variant": "#3323cc",
+                    "on-tertiary-container": "#6f7ae5",
+                    "surface-bright": "#f7f9fb",
+                    "inverse-surface": "#2d3133",
+                    "primary-fixed": "#dae2fd",
+                    "on-error": "#ffffff",
+                    "primary-fixed-dim": "#bec6e0",
+                    "on-background": "#191c1e",
+                    "secondary-container": "#645efb",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#bdc2ff",
+                    "on-surface": "#191c1e",
+                    "error": "#ba1a1a",
+                    "secondary-fixed-dim": "#c3c0ff",
+                    "surface-dim": "#d8dadc",
+                    "outline": "#76777d",
+                    "on-tertiary-fixed": "#000767",
+                    "on-secondary-container": "#fffbff",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container-high": "#e6e8ea",
+                    "surface-container-lowest": "#ffffff",
+                    "outline-variant": "#c6c6cd",
+                    "surface-container": "#eceef0",
+                    "surface-container-low": "#f2f4f6",
+                    "on-tertiary-fixed-variant": "#2f3aa3",
+                    "secondary": "#4b41e1",
+                    "on-primary-fixed": "#131b2e",
+                    "surface-container-highest": "#e0e3e5",
+                    "surface": "#f7f9fb",
+                    "on-primary-fixed-variant": "#3f465c",
+                    "tertiary-container": "#000767",
+                    "surface-variant": "#e0e3e5",
+                    "tertiary": "#000000",
+                    "primary-container": "#131b2e",
+                    "surface-tint": "#565e74",
+                    "secondary-fixed": "#e2dfff",
+                    "inverse-primary": "#bec6e0",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "on-secondary-fixed": "#0f0069"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .premium-gradient {
+            background: linear-gradient(135deg, #4B41E1 0%, #645EFB 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body selection:bg-secondary/30">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-[#0F172A] docked full-width top-0 z-50 fixed w-full">
+<div class="flex items-center justify-between px-6 py-4 w-full max-w-7xl mx-auto">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#4B41E1] dark:text-[#645EFB] text-2xl" data-icon="graphic_eq">graphic_eq</span>
+<span class="font-manrope font-bold tracking-tight text-xl font-extrabold text-[#0F172A] dark:text-white">InterviewAI</span>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-[#4B41E1] font-bold font-manrope text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-1.5 rounded-lg" href="#">Dashboard</a>
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-1.5 rounded-lg" href="#">Start Session</a>
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-1.5 rounded-lg" href="#">History</a>
+<a class="text-slate-500 font-manrope text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors px-3 py-1.5 rounded-lg" href="#">Insights</a>
+</nav>
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden border-2 border-white">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="professional portrait of a person in a minimalist setting with soft natural lighting and neutral colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCST2uRDUlvVyrlzF9XB4vPB-xLk-4NdgxVFkl3fyTRsbGXsqj_BgQhFxJDri2qaDESSR8aezLbBiAOCKGY4dG3KLj5PjRKJKWVXc3VkoqG6fVBvcLK89s5IZPBStJthPZIjA1dYfdbCwVkspLUWE8UKohtOoQ8y1k5pMGDdn-EDpji74AKX77cmXZaCp1Fn7EFljqTbo7OKilnD_lYeDx2vmoRJ9K_zAJCOOEBVhfkqlcmpTOuTF-4vUKHD1B-5tRb41KmTwLO_uY"/>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-24 pb-12 px-6 max-w-7xl mx-auto min-h-screen">
+<!-- Hero Section -->
+<section class="py-16 md:py-24 flex flex-col items-center text-center">
+<div class="mb-6 inline-flex items-center gap-2 bg-secondary/10 px-4 py-2 rounded-full">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="text-secondary font-label font-bold text-xs uppercase tracking-wider">Powered by SecondMe AI</span>
+</div>
+<h1 class="font-headline text-5xl md:text-7xl font-extrabold text-on-surface tracking-tight mb-6 max-w-4xl leading-[1.1]">
+                AI Mock Interview
+            </h1>
+<p class="font-body text-lg md:text-xl text-on-surface-variant max-w-2xl mb-12 leading-relaxed">
+                Practice interviews with AI interviewers and SecondMe avatars to refine your skills and boost your confidence.
+            </p>
+<div class="flex flex-col sm:flex-row gap-4">
+<button class="premium-gradient text-white px-10 py-4 rounded-xl font-headline font-bold text-lg active:scale-95 duration-150 shadow-xl shadow-secondary/20">
+                    Start Practice
+                </button>
+<button class="bg-surface-container-high text-on-surface px-10 py-4 rounded-xl font-headline font-bold text-lg active:scale-95 duration-150">
+                    View Avatars
+                </button>
+</div>
+</section>
+<!-- Bento Grid / Feature Section -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mt-8">
+<!-- Main Content: Recent Activity -->
+<div class="md:col-span-8 bg-surface-container-lowest p-8 rounded-full border border-outline-variant/10">
+<div class="flex items-center justify-between mb-8">
+<h2 class="font-headline text-2xl font-bold text-on-surface">Recent Activity</h2>
+<span class="text-secondary font-label text-sm font-semibold cursor-pointer hover:underline">View all sessions</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Activity Card 1 -->
+<div class="bg-surface-container-low p-6 rounded-xl group hover:bg-surface-container transition-colors duration-200">
+<div class="flex items-center gap-4 mb-4">
+<div class="p-3 bg-white rounded-lg text-secondary">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+</div>
+<div>
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-bold">Recent role</p>
+<p class="font-headline font-bold text-lg">Frontend Engineer</p>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm text-on-surface-variant">
+<span>Last session: 2h ago</span>
+<span class="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<!-- Activity Card 2 -->
+<div class="bg-surface-container-low p-6 rounded-xl group hover:bg-surface-container transition-colors duration-200">
+<div class="flex items-center gap-4 mb-4">
+<div class="w-12 h-12 rounded-lg bg-white overflow-hidden p-0.5">
+<img alt="Sarah Profile" class="w-full h-full object-cover rounded-md" data-alt="close-up portrait of a friendly professional woman mentor with soft lighting and blurred office background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIHS3HrLhv1Y5J4ezu0Tj1wkb_TdX8TRKub8CKHE8gCVZuWNMPUZDDJUz5Vh3FipVNkQlIpKF2JJX1hrw2imUdyex-2cif7up0SHniYhq_sukwXLjqb3ob1cGnlgIh3NxV6L_1JnpTl00jsOG4q5uxaDZyclpo5ryiQECeXdkjtUh0RDDQYtuVQgFAgwMJuVrbCGPeUTND3hg4jt5eKLevmmprJK5fckecCAlg_EnuyEEbNWkMvmNuW3usksHxys3zOv1gvaL_jFA"/>
+</div>
+<div>
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant font-bold">Recent interviewer</p>
+<p class="font-headline font-bold text-lg">Sarah (SecondMe Mentor)</p>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs text-yellow-500" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span> 4.9 Rating</span>
+<span class="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Content: Stats / Quick Insights -->
+<div class="md:col-span-4 flex flex-col gap-6">
+<div class="bg-primary text-white p-8 rounded-full h-full flex flex-col justify-between">
+<div>
+<p class="font-label text-xs uppercase tracking-widest text-on-primary-container font-bold mb-2">Practice Streak</p>
+<p class="text-4xl font-headline font-extrabold mb-4">12 Days</p>
+</div>
+<div class="bg-white/10 h-1 rounded-full overflow-hidden">
+<div class="bg-secondary w-3/4 h-full"></div>
+</div>
+<p class="text-sm text-on-primary-container mt-4">You're in the top 5% of learners this week.</p>
+</div>
+<div class="bg-secondary text-white p-8 rounded-full h-full">
+<span class="material-symbols-outlined text-3xl mb-4" data-icon="insights">insights</span>
+<p class="font-headline font-bold text-xl mb-2">Ready for the real thing?</p>
+<p class="text-sm text-white/80">Your confidence score has improved by 24% since you started practicing.</p>
+</div>
+</div>
+</div>
+<!-- Featured Avatars Asymmetric Section -->
+<section class="mt-24">
+<h2 class="font-headline text-3xl font-extrabold text-on-surface mb-12">Interview Avatars</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Avatar 1 -->
+<div class="relative overflow-hidden rounded-full group h-96">
+<img class="w-full h-full object-cover" data-alt="minimalist architectural rendering of a high-tech studio with soft blue ambient light and clean geometric shapes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEfgyqvWvPYJrG8KdeKEI5qGU03X2eRpJSoiPhhkk-imCMik_AUGp9F2zADi2a1B4t8ubgSyc8GC0s89n2HDBEl_MZ446XR4vcdz2hjS0xMLW0KK_qh84wTBkXkk9dPSoSsgQBYctPvgYPg4wzqriGhQfyJTsto_0Qwk_MXjQjkngywT6yYUF3zKUu9exwZx1yFrRfZy8QWrSQHLtqNI9UdsxTLRs7fM3YeY4tPgmm9eMKJm1etCSFSnz4SV8okXfNPIR5FeskKx4"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex flex-col justify-end p-8">
+<h3 class="font-headline font-bold text-white text-xl">James</h3>
+<p class="text-white/70 text-sm mb-4">FAANG Tech Lead • Systems Design Expert</p>
+<button class="bg-white text-primary py-2 px-4 rounded-lg font-bold text-sm self-start">Select James</button>
+</div>
+</div>
+<!-- Avatar 2 -->
+<div class="relative overflow-hidden rounded-full group h-96 md:mt-12">
+<img class="w-full h-full object-cover" data-alt="abstract composition of soft gradients in lavender and indigo with grain texture for a professional backdrop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPEEtRtRAU8gZXvEmimOghaB9rwOpIcPrNFNwyqtka0uaEMR_gL3IiyNFR1oyaJ2bWnx6VfTseR4KFloO1qZzaek7Lc3_XrivWrDgl_EjoQANDNAjcJeYpk3uWMcD0D5pN9jNSo9aBjVFeTtE2sW6Se-1WWH6C2IH2jaTSvgFWivxJTsQAs3dBMBnWG0ByWpKCNyrRYSSIco_YQ0Xdk1O626e1YtJKj6tY-zYUPu7mpzDmLGW-4pJi6_0IrVtXNERMbwJODLvqSnU"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex flex-col justify-end p-8">
+<h3 class="font-headline font-bold text-white text-xl">Elena</h3>
+<p class="text-white/70 text-sm mb-4">Senior HR Recruiter • Behavioral Specialist</p>
+<button class="bg-white text-primary py-2 px-4 rounded-lg font-bold text-sm self-start">Select Elena</button>
+</div>
+</div>
+<!-- Avatar 3 -->
+<div class="relative overflow-hidden rounded-full group h-96">
+<img class="w-full h-full object-cover" data-alt="clean bright office space with modern desk and warm wooden textures in the background blurred out" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDScankZVxRTuDPTT1sbYZ8xyWeoOkeQV-6zc4NQK_hRy6b4FhP78nWEDMNP_YwzblSqT8tuiYVpvbuOKviELyUeOgV4KzQJg6cXfSf7i70nDaSVFJiLMeor47sPXAlJtMh2ErhByCEZW6fi8k4BdqHs-dzG9Z5VHk3A7ZLj1SC8SV1YFXdIrsZ5KCeSqV7b9b8lBzOHNi39dxZCjo0W2OClHThNcjgU-CLmlYAAth0aoEkMH74_Ze9w7Y4EVcLXtK-pTUexGatSc8"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex flex-col justify-end p-8">
+<h3 class="font-headline font-bold text-white text-xl">Marcus</h3>
+<p class="text-white/70 text-sm mb-4">Startup CTO • Generalist Interviewer</p>
+<button class="bg-white text-primary py-2 px-4 rounded-lg font-bold text-sm self-start">Select Marcus</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Navigation Bar for Mobile -->
+<nav class="md:hidden fixed bottom-6 left-6 right-6 glass-panel rounded-full p-4 flex justify-between items-center shadow-2xl z-50">
+<a class="flex flex-col items-center gap-1 text-[#4B41E1]" href="#">
+<span class="material-symbols-outlined" data-icon="home" style="font-variation-settings: 'FILL' 1;">home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="settings_voice">settings_voice</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+</a>
+</nav>
+<!-- Floating Action Button -->
+<button class="fixed bottom-8 right-8 w-16 h-16 premium-gradient text-white rounded-full flex items-center justify-center shadow-2xl z-40 active:scale-90 duration-150">
+<span class="material-symbols-outlined text-3xl" data-icon="add">add</span>
+</button>
+</body></html>
