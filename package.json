@@ -1,0 +1,14 @@
+{
+  "name": "interview-hub-workspace",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev --workspace @interview-hub/web",
+    "build": "npm run build:web",
+    "build:web": "npm run build --workspace @interview-hub/web",
+    "preview:web": "npm run preview --workspace @interview-hub/web"
+  }
+}

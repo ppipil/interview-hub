@@ -1,1 +1,9 @@
 .DS_Store
+node_modules
+dist
+.codex
+.npm-cache
+*.tsbuildinfo
+apps/api/.env
+apps/api/.venv
+.pycache

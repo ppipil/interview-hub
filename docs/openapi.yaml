@@ -1,0 +1,547 @@
+openapi: 3.0.3
+info:
+  title: AI Mock Interview MVP API
+  version: 0.1.0
+  description: |
+    MVP 阶段的 AI 模拟面试接口规范。
+    面向前端 Vite + React 壳子与未来 Python/Node.js 后端对接，
+    采用基于 session 的流程设计。
+servers:
+  - url: http://localhost:8000
+    description: Local backend development server
+tags:
+  - name: Interviewers
+    description: 面试官列表与基础元数据
+  - name: Sessions
+    description: 面试会话初始化与状态管理
+  - name: Messages
+    description: 面试对话发送与 AI 回复
+  - name: Feedback
+    description: 面试结果反馈
+paths:
+  /api/v1/interviewers:
+    get:
+      tags:
+        - Interviewers
+      summary: 获取面试官列表
+      description: 返回可用于设置页展示的系统面试官与 AI 分身面试官列表。
+      parameters:
+        - in: query
+          name: role
+          required: false
+          schema:
+            $ref: '#/components/schemas/InterviewRole'
+          description: 按岗位过滤适配的面试官
+      responses:
+        '200':
+          description: 成功返回面试官列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Interviewer'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/interview-sessions:
+    post:
+      tags:
+        - Sessions
+      summary: 初始化面试 Session
+      description: 基于设置页配置创建新的面试会话，并返回首个面试问题。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CreateSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/interview-sessions/{sessionId}/messages:
+    post:
+      tags:
+        - Messages
+      summary: 发送用户回答并接收 AI 回复
+      description: |
+        向指定 Session 发送本轮回答。
+        若会话仍在进行中，接口返回 AI 下一条提问；
+        若会话结束，接口返回 completed 状态并提示前端拉取最终反馈。
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: 成功处理本轮消息
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/interview-sessions/{sessionId}/feedback:
+    get:
+      tags:
+        - Feedback
+      summary: 获取最终评价
+      description: 获取某次面试 Session 的总结评价、维度反馈和改进建议。
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: 成功返回最终反馈
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/InterviewFeedback'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Session 尚未完成，暂时无法获取反馈
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    SessionId:
+      in: path
+      name: sessionId
+      required: true
+      description: 面试会话唯一标识
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: 请求格式错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: 当前资源状态不允许执行该操作
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: 服务端异常
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    InterviewRole:
+      type: string
+      enum:
+        - frontend
+        - backend
+        - product_manager
+        - operations
+        - data_analyst
+
+    InterviewMode:
+      type: string
+      enum:
+        - guided
+        - real
+
+    InterviewerType:
+      type: string
+      enum:
+        - system
+        - avatar
+
+    SessionStatus:
+      type: string
+      enum:
+        - pending
+        - in_progress
+        - completed
+        - failed
+
+    MessageRole:
+      type: string
+      enum:
+        - assistant
+        - user
+
+    Interviewer:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - title
+        - description
+        - avatarUrl
+        - supportedModes
+      properties:
+        id:
+          type: string
+          example: system_tech
+        type:
+          $ref: '#/components/schemas/InterviewerType'
+        name:
+          type: string
+          example: Tech Lead Alex
+        title:
+          type: string
+          example: 技术深挖型面试官
+        description:
+          type: string
+          example: 喜欢追问项目细节和设计取舍，问题节奏偏快。
+        avatarUrl:
+          type: string
+          format: uri
+          example: https://example.com/avatars/system_tech.png
+        tags:
+          type: array
+          items:
+            type: string
+          example:
+            - 技术深挖
+            - 高频追问
+        supportedRoles:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterviewRole'
+        supportedModes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterviewMode'
+        persona:
+          type: string
+          nullable: true
+          example: 语速快，关注工程化、性能优化和复盘能力。
+
+    Session:
+      type: object
+      required:
+        - id
+        - role
+        - mode
+        - interviewerId
+        - status
+        - currentRound
+        - totalRounds
+        - startedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/InterviewRole'
+        mode:
+          $ref: '#/components/schemas/InterviewMode'
+        interviewerId:
+          type: string
+          example: system_tech
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        currentRound:
+          type: integer
+          minimum: 1
+          example: 1
+        totalRounds:
+          type: integer
+          minimum: 1
+          maximum: 3
+          example: 3
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ConversationMessage:
+      type: object
+      required:
+        - id
+        - role
+        - content
+        - round
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/MessageRole'
+        content:
+          type: string
+          example: 介绍一下你在最近一个项目里负责的模块。
+        round:
+          type: integer
+          minimum: 1
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateSessionRequest:
+      type: object
+      required:
+        - role
+        - mode
+        - interviewerId
+      properties:
+        role:
+          $ref: '#/components/schemas/InterviewRole'
+        mode:
+          $ref: '#/components/schemas/InterviewMode'
+        interviewerId:
+          type: string
+          example: system_tech
+        totalRounds:
+          type: integer
+          minimum: 1
+          maximum: 3
+          default: 3
+          example: 3
+
+    CreateSessionResponse:
+      type: object
+      required:
+        - session
+        - interviewer
+        - firstQuestion
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        interviewer:
+          $ref: '#/components/schemas/Interviewer'
+        firstQuestion:
+          $ref: '#/components/schemas/ConversationMessage'
+
+    SendMessageRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          example: 我在这个项目里主要负责搭建组件库和首屏性能优化。
+        clientMessageId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 前端生成的消息 ID，用于幂等与重试
+
+    SendMessageResponse:
+      type: object
+      required:
+        - session
+        - userMessage
+        - shouldFetchFeedback
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+        userMessage:
+          $ref: '#/components/schemas/ConversationMessage'
+        assistantMessage:
+          allOf:
+            - $ref: '#/components/schemas/ConversationMessage'
+          nullable: true
+        shouldFetchFeedback:
+          type: boolean
+          example: false
+
+    FeedbackDimension:
+      type: object
+      required:
+        - key
+        - label
+        - score
+        - comment
+      properties:
+        key:
+          type: string
+          example: clarity
+        label:
+          type: string
+          example: 表达清晰度
+        score:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        comment:
+          type: string
+          example: 结构清晰，能快速进入重点，但案例细节还可以更具体。
+
+    RoundReview:
+      type: object
+      required:
+        - round
+        - question
+        - answer
+        - note
+      properties:
+        round:
+          type: integer
+          minimum: 1
+          example: 1
+        question:
+          type: string
+          example: 介绍一下你最近做过的一个前端项目，并说说你在里面负责什么。
+        answer:
+          type: string
+          example: 我最近主导了一个数据看板重构，主要负责架构拆分、性能优化和埋点体系整理。
+        note:
+          type: string
+          example: 主线清楚，但还可以再补一点性能指标和取舍依据。
+
+    InterviewFeedback:
+      type: object
+      required:
+        - sessionId
+        - summary
+        - dimensions
+        - strengths
+        - improvements
+        - suggestedAnswer
+        - roundReviews
+        - generatedAt
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+          example: 这轮表现稳，表达在线，但技术细节还有继续拉满的空间。
+        dimensions:
+          type: array
+          minItems: 3
+          items:
+            $ref: '#/components/schemas/FeedbackDimension'
+        strengths:
+          type: array
+          items:
+            type: string
+          example:
+            - 开场自我介绍节奏自然
+            - 能主动补充项目背景
+        improvements:
+          type: array
+          minItems: 3
+          items:
+            type: string
+          example:
+            - 追问环节需要补足量化结果
+            - 技术方案取舍可以再讲清楚
+            - 回答结尾增加总结句会更稳
+        suggestedAnswer:
+          type: string
+          example: 如果让我重新回答，我会先讲目标，再讲方案、取舍和最终结果。
+        roundReviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoundReview'
+        generatedAt:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          example: interviewerId
+        message:
+          type: string
+          example: interviewerId is required
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Invalid request payload
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'

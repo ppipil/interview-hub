@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Vite + React 18 + TypeScript + Tailwind CSS + Zustand + lucide-react
+  Product docs:
+    - PRD: docs/PRD.md
+    - API contract: docs/openapi.yaml
+    - Design system: docs/design.md
+  Conventions:
+    - stitch_exports/ is read-only source material and must not be edited
+    - Shared domain types must derive from docs/openapi.yaml
+    - UI components must not hardcode mock data; mock data belongs in src/services/api.ts
+    - Reusable presentational components live in src/components/ui
+    - Business-aware components live in src/components/features
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
