@@ -78,34 +78,37 @@ class SecondMeRealtimeChannel:
       self._heartbeat_thread.start()
 
   async def wait_for_reply(self) -> str:
-    try:
-      event = await asyncio.wait_for(
-        self._queue.get(),
-        timeout=self._reply_timeout_seconds,
-      )
-    except asyncio.TimeoutError as exc:
-      raise UpstreamServiceError("等待 SecondMe 回复超时。") from exc
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + self._reply_timeout_seconds
+    merged_reply = ""
 
-    if isinstance(event, UpstreamServiceError):
-      raise event
-    if isinstance(event, ReplyDone):
-      raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
-
-    merged_reply = event
     while True:
+      timeout_seconds = self._stream_idle_timeout_seconds if merged_reply else max(0.0, deadline - loop.time())
       try:
-        next_event = await asyncio.wait_for(
+        event = await asyncio.wait_for(
           self._queue.get(),
-          timeout=self._stream_idle_timeout_seconds,
+          timeout=timeout_seconds,
         )
-      except asyncio.TimeoutError:
-        return merged_reply.strip()
+      except asyncio.TimeoutError as exc:
+        if merged_reply:
+          return self._ensure_non_empty_reply(merged_reply)
+        raise UpstreamServiceError("等待 SecondMe 回复超时。") from exc
 
-      if isinstance(next_event, UpstreamServiceError):
-        raise next_event
-      if isinstance(next_event, ReplyDone):
-        return self._ensure_non_empty_reply(merged_reply)
-      merged_reply = self._merge_reply_chunk(merged_reply, next_event)
+      if isinstance(event, UpstreamServiceError):
+        raise event
+      if isinstance(event, ReplyDone):
+        if merged_reply:
+          return self._ensure_non_empty_reply(merged_reply)
+        # Visitor Chat may emit a done/control event before the content event
+        # that the official app eventually renders. Keep listening instead of
+        # saving an empty question.
+        if loop.time() >= deadline:
+          raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
+        continue
+      merged_reply = self._merge_reply_chunk(merged_reply, event)
+
+      if loop.time() >= deadline:
+        return merged_reply.strip()
 
   async def close(self) -> None:
     self._stop_event.set()
@@ -154,12 +157,12 @@ class SecondMeRealtimeChannel:
   def _on_message(self, _: websocket.WebSocketApp, raw_message: str) -> None:
     with contextlib.suppress(json.JSONDecodeError):
       payload = json.loads(raw_message)
-      if payload.get("sender") == "umm" and payload.get("index") == -1:
-        self._push_event(ReplyDone())
-        return
       answer = self._extract_answer(payload)
       if answer:
         self._push_event(answer)
+      if payload.get("sender") == "umm" and payload.get("index") == -1:
+        self._push_event(ReplyDone())
+        return
 
   def _on_error(self, _: websocket.WebSocketApp, error: Any) -> None:
     if not self._connected:
@@ -195,29 +198,45 @@ class SecondMeRealtimeChannel:
 
   def _extract_answer(self, payload: Dict[str, Any]) -> Optional[str]:
     sender = payload.get("sender")
-    if sender == "umm":
-      return self._extract_multiple_data_answer(payload)
+    normalized_sender = str(sender or "").lower()
+    if normalized_sender in {"umm", "assistant", "avatar", "agent", "bot", "ai", "secondme"}:
+      return self._extract_text_answer(payload)
 
-    if self._visitor_user_id and sender == "client" and payload.get("sendUserId") != self._visitor_user_id:
-      return self._extract_multiple_data_answer(payload)
+    send_user_id = payload.get("sendUserId") or payload.get("senderUserId") or payload.get("userId")
+    if self._visitor_user_id and normalized_sender == "client" and send_user_id and send_user_id != self._visitor_user_id:
+      return self._extract_text_answer(payload)
 
     return None
 
-  def _extract_multiple_data_answer(self, payload: Dict[str, Any]) -> Optional[str]:
-    multiple_data = payload.get("multipleData")
-    if not isinstance(multiple_data, list) or not multiple_data:
+  def _extract_text_answer(self, payload: Dict[str, Any]) -> Optional[str]:
+    return self._extract_text_from_payload(payload)
+
+  def _extract_text_from_payload(self, payload: Any) -> Optional[str]:
+    if isinstance(payload, str):
+      normalized = payload.strip()
+      return normalized or None
+
+    if isinstance(payload, list):
+      for item in payload:
+        text = self._extract_text_from_payload(item)
+        if text:
+          return text
       return None
 
-    first_item = multiple_data[0]
-    if not isinstance(first_item, dict):
+    if not isinstance(payload, dict):
       return None
 
-    modal = first_item.get("modal")
-    if not isinstance(modal, dict):
-      return None
+    for key in ("answer", "content", "text", "message", "reply", "output", "delta"):
+      value = payload.get(key)
+      if isinstance(value, str) and value.strip():
+        return value.strip()
 
-    answer = modal.get("answer")
-    return str(answer).strip() if answer else None
+    for key in ("modal", "data", "message", "payload", "body", "multipleData", "messages"):
+      text = self._extract_text_from_payload(payload.get(key))
+      if text:
+        return text
+
+    return None
 
   def _merge_reply_chunk(self, current: str, next_chunk: str) -> str:
     if not current:

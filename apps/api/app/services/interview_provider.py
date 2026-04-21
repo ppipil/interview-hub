@@ -313,7 +313,7 @@ class SecondMeVisitorInterviewProvider:
     )
     channel = SecondMeRealtimeChannel(
       ws_id=chat.session_id,
-      visitor_user_id="",
+      visitor_user_id=visitor_id,
       origin=None,
       heartbeat_interval_seconds=0,
       reply_timeout_seconds=self._websocket_reply_timeout_seconds,
