@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from app.core.config import Settings
-from app.core.errors import ValidationError
+from app.core.errors import UpstreamServiceError, ValidationError
 from app.models.api import (
   ConversationMessage,
   CreateSessionRequest,
@@ -84,6 +84,16 @@ class FakeProvider:
         }
       ],
       generatedAt="2026-04-20T00:00:00+00:00",
+    )
+
+
+class EmptyBootstrapProvider(FakeProvider):
+  async def bootstrap(self, interviewer, role, mode, total_rounds):
+    result = await super().bootstrap(interviewer, role, mode, total_rounds)
+    return ProviderBootstrapResult(
+      first_question_text=" ",
+      runtime=result.runtime,
+      channel=result.channel,
     )
 
   async def close(self, runtime, channel):
@@ -211,6 +221,27 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(feedback.summary, "secondme_visitor-summary")
     self.assertEqual(self.avatar_provider.bootstrap_calls, 1)
     self.assertEqual(self.avatar_provider.feedback_calls, 1)
+
+  async def test_empty_first_question_is_rejected(self) -> None:
+    service = InterviewService(
+      settings=build_settings(),
+      repository=InMemorySessionRepository(),
+      persistence=NullPersistenceRepository(),
+      catalog=self.catalog,
+      providers=InterviewProviderRegistry([EmptyBootstrapProvider("doubao"), self.avatar_provider]),
+    )
+
+    with self.assertRaises(UpstreamServiceError) as ctx:
+      await service.create_session(
+        payload=CreateSessionRequest(
+          role="frontend",
+          mode="guided",
+          interviewerId="system_tech",
+          totalRounds=2,
+        )
+      )
+
+    self.assertEqual(ctx.exception.code, "INTERVIEWER_EMPTY_FIRST_QUESTION")
 
   async def test_round_validation_rejects_out_of_range_values(self) -> None:
     with self.assertRaises(ValidationError):

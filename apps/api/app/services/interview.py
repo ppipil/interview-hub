@@ -5,7 +5,7 @@ from typing import List
 from uuid import uuid4
 
 from app.core.config import Settings
-from app.core.errors import ConflictError, ValidationError
+from app.core.errors import ConflictError, UpstreamServiceError, ValidationError
 from app.models.api import (
   ConversationMessage,
   CreateSessionRequest,
@@ -64,6 +64,12 @@ class InterviewService:
       mode=payload.mode,
       total_rounds=total_rounds,
     )
+    first_question_text = bootstrap.first_question_text.strip()
+    if not first_question_text:
+      raise UpstreamServiceError(
+        "面试官没有返回有效的首轮问题，请稍后重试或切换面试官。",
+        code="INTERVIEWER_EMPTY_FIRST_QUESTION",
+      )
 
     session = Session(
       id=local_session_id,
@@ -79,7 +85,7 @@ class InterviewService:
     first_question = ConversationMessage(
       id=str(uuid4()),
       role="assistant",
-      content=bootstrap.first_question_text,
+      content=first_question_text,
       round=1,
       createdAt=self._now(),
     )
@@ -149,6 +155,12 @@ class InterviewService:
       channel=channel,
       answer=content,
     )
+    assistant_reply = assistant_reply.strip()
+    if not assistant_reply:
+      raise UpstreamServiceError(
+        "面试官没有返回有效问题，请稍后重试或切换面试官。",
+        code="INTERVIEWER_EMPTY_FOLLOW_UP",
+      )
 
     next_round = session.currentRound + 1
     assistant_message = ConversationMessage(

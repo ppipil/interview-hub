@@ -89,7 +89,7 @@ class SecondMeRealtimeChannel:
     if isinstance(event, UpstreamServiceError):
       raise event
     if isinstance(event, ReplyDone):
-      return ""
+      raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
 
     merged_reply = event
     while True:
@@ -104,7 +104,7 @@ class SecondMeRealtimeChannel:
       if isinstance(next_event, UpstreamServiceError):
         raise next_event
       if isinstance(next_event, ReplyDone):
-        return merged_reply.strip()
+        return self._ensure_non_empty_reply(merged_reply)
       merged_reply = self._merge_reply_chunk(merged_reply, next_event)
 
   async def close(self) -> None:
@@ -238,6 +238,12 @@ class SecondMeRealtimeChannel:
       if current[-overlap:] == next_chunk[:overlap]:
         return f"{current}{next_chunk[overlap:]}"
     return f"{current}{next_chunk}"
+
+  def _ensure_non_empty_reply(self, reply: str) -> str:
+    normalized = reply.strip()
+    if not normalized:
+      raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
+    return normalized
 
   def _join_thread(self, thread: Optional[threading.Thread]) -> None:
     if thread and thread.is_alive():
