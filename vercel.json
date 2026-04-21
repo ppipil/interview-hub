@@ -4,6 +4,11 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace @interview-hub/web",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",
