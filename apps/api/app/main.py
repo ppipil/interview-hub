@@ -33,6 +33,11 @@ def healthcheck() -> dict:
   return {"status": "ok", "service": settings.app_name}
 
 
+@app.on_event("startup")
+def startup_event() -> None:
+  get_interview_service().sync_catalog()
+
+
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
   await get_interview_service().close()

@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { ModeSelector } from "../components/features/setup/ModeSelector";
 import { RoleSelector } from "../components/features/setup/RoleSelector";
 import { InterviewerPicker } from "../components/features/setup/InterviewerPicker";
+import { RoundSelector } from "../components/features/setup/RoundSelector";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
 import { useInterviewStore, selectCanStartInterview } from "../store/useInterviewStore";
 
@@ -43,6 +44,10 @@ export const SetupPage = () => {
         <ModeSelector
           selectedMode={setup.mode}
           onSelect={(mode) => updateSetup({ mode })}
+        />
+        <RoundSelector
+          selectedRounds={setup.totalRounds}
+          onSelect={(totalRounds) => updateSetup({ totalRounds })}
         />
         <InterviewerPicker
           interviewers={interviewers}

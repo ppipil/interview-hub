@@ -20,12 +20,13 @@ class InMemorySessionRepository:
     self,
     session: Session,
     runtime: SessionRuntime,
-    channel: SecondMeRealtimeChannel,
+    channel: Optional[SecondMeRealtimeChannel],
     first_question: ConversationMessage,
   ) -> None:
     self._sessions[session.id] = session
     self._runtimes[session.id] = runtime
-    self._channels[session.id] = channel
+    if channel:
+      self._channels[session.id] = channel
     self._messages[session.id] = [first_question]
 
   def get_session(self, session_id: str) -> Session:
@@ -67,6 +68,11 @@ class InMemorySessionRepository:
       raise NotFoundError("未找到对应的实时连接。", field="sessionId")
     return channel
 
+  def get_optional_channel(self, session_id: str) -> Optional[SecondMeRealtimeChannel]:
+    self.get_session(session_id)
+    return self._channels.get(session_id)
+
   async def close_all(self) -> None:
     for channel in list(self._channels.values()):
-      await channel.close()
+      if channel:
+        await channel.close()

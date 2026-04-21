@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  AdminInterviewer,
   ErrorResponse,
   CreateSessionRequest,
   CreateSessionResponse,
@@ -8,12 +9,18 @@ import type {
   Interviewer,
   SendMessageRequest,
   SendMessageResponse,
+  UpsertAdminInterviewerRequest,
 } from "../types";
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8001";
-
+const isDevelopment = import.meta.env.DEV;
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const apiBaseUrl = rawApiBaseUrl ? rawApiBaseUrl.replace(/\/$/, "") : DEFAULT_API_BASE_URL;
+const apiBaseUrl = rawApiBaseUrl
+  ? rawApiBaseUrl.replace(/\/$/, "")
+  : isDevelopment
+    ? "http://127.0.0.1:8000"
+    : "";
+const hasExplicitApiBaseUrl = Boolean(rawApiBaseUrl);
+const isMissingProductionApiBaseUrl = !isDevelopment && !hasExplicitApiBaseUrl;
 
 export class ApiClientError extends Error {
   readonly status: number;
@@ -49,7 +56,7 @@ const isApiResponse = <T>(value: unknown): value is ApiResponse<T> => {
   return Object.prototype.hasOwnProperty.call(value, "data");
 };
 
-const buildUrl = (path: string) => `${apiBaseUrl}${path}`;
+const buildUrl = (path: string) => (apiBaseUrl ? `${apiBaseUrl}${path}` : path);
 
 const buildError = (status: number, code: string, message: string) =>
   new ApiClientError(status, {
@@ -86,17 +93,31 @@ const request = async <T>(path: string, init?: RequestInit): Promise<ApiResponse
       },
     });
   } catch {
-    throw buildError(0, "NETWORK_ERROR", "当前无法连接面试服务，请确认本地后端已经启动。");
+    throw buildError(
+      0,
+      "NETWORK_ERROR",
+      isMissingProductionApiBaseUrl
+        ? "当前站点还没有配置线上 API 地址，请先设置 VITE_API_BASE_URL。"
+        : "当前无法连接面试服务，请确认后端服务已经启动。",
+    );
   }
 
   const payload = await parsePayload(response);
 
   if (!response.ok) {
+    if (response.status === 404 && isMissingProductionApiBaseUrl) {
+      throw buildError(404, "API_BASE_URL_NOT_CONFIGURED", "当前站点还没有配置线上 API 地址，请先设置 VITE_API_BASE_URL。");
+    }
+
     if (isErrorResponse(payload)) {
       throw new ApiClientError(response.status, payload);
     }
 
     throw buildError(response.status, "HTTP_ERROR", `请求失败（${response.status}）。`);
+  }
+
+  if (response.status === 204) {
+    return { data: null as T };
   }
 
   if (!isApiResponse<T>(payload)) {
@@ -137,4 +158,25 @@ export const interviewApi = {
 
   getInterviewFeedback: (sessionId: string) =>
     request<InterviewFeedback>(`/api/v1/interview-sessions/${sessionId}/feedback`),
+};
+
+export const adminApi = {
+  getInterviewers: () => request<AdminInterviewer[]>("/api/v1/admin/interviewers"),
+
+  createInterviewer: (payload: UpsertAdminInterviewerRequest) =>
+    request<AdminInterviewer>("/api/v1/admin/interviewers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateInterviewer: (interviewerId: string, payload: UpsertAdminInterviewerRequest) =>
+    request<AdminInterviewer>(`/api/v1/admin/interviewers/${interviewerId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteInterviewer: (interviewerId: string) =>
+    request<null>(`/api/v1/admin/interviewers/${interviewerId}`, {
+      method: "DELETE",
+    }),
 };

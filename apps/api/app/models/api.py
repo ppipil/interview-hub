@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 InterviewRole = Literal["frontend", "backend", "product_manager", "operations", "data_analyst"]
 InterviewMode = Literal["guided", "real"]
 InterviewerType = Literal["system", "avatar"]
+InterviewerProvider = Literal["doubao", "secondme_legacy", "secondme_visitor"]
 SessionStatus = Literal["pending", "in_progress", "completed", "failed"]
 MessageRole = Literal["assistant", "user"]
 
@@ -29,6 +30,7 @@ class ErrorResponse(BaseModel):
 class Interviewer(BaseModel):
   id: str
   type: InterviewerType
+  provider: InterviewerProvider
   name: str
   title: str
   description: str
@@ -37,6 +39,51 @@ class Interviewer(BaseModel):
   supportedRoles: List[InterviewRole] = Field(default_factory=list)
   supportedModes: List[InterviewMode] = Field(default_factory=list)
   persona: Optional[str] = None
+  promptStrategy: Optional[str] = None
+  skillPrompt: Optional[str] = None
+  interviewFlow: Optional[str] = None
+
+
+class AdminInterviewer(BaseModel):
+  id: str
+  type: InterviewerType
+  provider: InterviewerProvider
+  name: str
+  title: str
+  description: str
+  avatarUrl: str
+  tags: List[str] = Field(default_factory=list)
+  supportedRoles: List[InterviewRole] = Field(default_factory=list)
+  supportedModes: List[InterviewMode] = Field(default_factory=list)
+  persona: Optional[str] = None
+  promptStrategy: Optional[str] = None
+  skillPrompt: Optional[str] = None
+  interviewFlow: Optional[str] = None
+  enabled: bool = True
+  profileExists: bool = False
+  hasAvatarApiKey: bool = False
+  avatarApiKey: Optional[str] = None
+  avatarApiKeyMasked: Optional[str] = None
+  updatedAt: Optional[str] = None
+
+
+class UpsertAdminInterviewerRequest(BaseModel):
+  id: str = Field(min_length=2, max_length=80)
+  type: InterviewerType
+  provider: Optional[InterviewerProvider] = None
+  name: str = Field(min_length=1, max_length=80)
+  title: str = Field(min_length=1, max_length=120)
+  description: str = Field(min_length=1, max_length=500)
+  avatarUrl: Optional[str] = None
+  tags: List[str] = Field(default_factory=list)
+  supportedRoles: List[InterviewRole] = Field(default_factory=list)
+  supportedModes: List[InterviewMode] = Field(default_factory=list)
+  persona: Optional[str] = None
+  promptStrategy: Optional[str] = None
+  skillPrompt: Optional[str] = None
+  interviewFlow: Optional[str] = None
+  avatarApiKey: Optional[str] = None
+  enabled: bool = True
 
 
 class Session(BaseModel):
@@ -96,6 +143,8 @@ class RoundReview(BaseModel):
   question: str
   answer: str
   note: str
+  evaluation: str
+  referenceAnswer: str
 
 
 class InterviewFeedback(BaseModel):
@@ -111,6 +160,14 @@ class InterviewFeedback(BaseModel):
 
 class InterviewersEnvelope(BaseModel):
   data: List[Interviewer]
+
+
+class AdminInterviewersEnvelope(BaseModel):
+  data: List[AdminInterviewer]
+
+
+class AdminInterviewerEnvelope(BaseModel):
+  data: AdminInterviewer
 
 
 class CreateSessionEnvelope(BaseModel):

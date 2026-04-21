@@ -37,7 +37,7 @@ const getErrorMessage = (error: unknown) => {
   return "发生了一点意外，请稍后再试。";
 };
 
-const clampRounds = (totalRounds: number) => Math.min(3, Math.max(1, Math.floor(totalRounds)));
+const clampRounds = (totalRounds: number) => Math.min(10, Math.max(1, Math.floor(totalRounds)));
 
 export interface InterviewStoreState {
   stage: InterviewStage;

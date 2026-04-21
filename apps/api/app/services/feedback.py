@@ -54,7 +54,10 @@ class FeedbackService:
       "3. strengths：输出 2 条中文亮点，每条控制在18字以内。\n"
       "4. improvements：输出 3 条中文改进建议，每条控制在24字以内。\n"
       "5. suggestedAnswer：输出一句更成熟的回答策略或参考表达，控制在40字以内。\n"
-      "6. roundReviews：按轮次输出数组，每项至少包含 round 和 note；note 用中文一句话点评这一轮回答，控制在20字以内。\n"
+      "6. roundReviews：按轮次输出数组，每项必须包含 round、note、evaluation、referenceAnswer；"
+      "note 用中文一句话概括观察，控制在20字以内；"
+      "evaluation 用中文评价这一轮回答的优点和缺口，控制在45字以内；"
+      "referenceAnswer 给出更成熟的参考答案或答题结构，控制在90字以内。\n"
       "7. 不要遗漏任何轮次，不要输出 null。\n"
       f"当前岗位：{ROLE_LABELS[session.role]}。\n"
       f"当前模式：{MODE_LABELS[session.mode]}。\n"
@@ -244,7 +247,7 @@ class FeedbackService:
     if not transcript_rounds:
       return [], 0
 
-    notes_by_round: Dict[int, str] = {}
+    reviews_by_round: Dict[int, Dict[str, str]] = {}
     if isinstance(raw_round_reviews, list):
       for index, item in enumerate(raw_round_reviews, start=1):
         if not isinstance(item, dict):
@@ -252,20 +255,47 @@ class FeedbackService:
 
         round_number = self._coerce_round_number(item.get("round")) or index
         note = self._as_text(item.get("note") or item.get("comment") or item.get("复盘") or item.get("点评"))
-        if note:
-          notes_by_round[round_number] = note
+        evaluation = self._as_text(
+          item.get("evaluation")
+          or item.get("评价")
+          or item.get("评语")
+          or item.get("assessment")
+          or item.get("comment"),
+        )
+        reference_answer = self._as_text(
+          item.get("referenceAnswer")
+          or item.get("reference_answer")
+          or item.get("参考答案")
+          or item.get("suggestedAnswer")
+          or item.get("optimizedAnswer"),
+        )
+        if note or evaluation or reference_answer:
+          reviews_by_round[round_number] = {
+            "note": note,
+            "evaluation": evaluation,
+            "referenceAnswer": reference_answer,
+          }
 
     normalized: List[RoundReview] = []
     for entry in transcript_rounds:
+      review = reviews_by_round.get(entry["round"], {})
       normalized.append(
         RoundReview(
           round=entry["round"],
           question=entry["question"],
           answer=entry["answer"],
-          note=notes_by_round.get(entry["round"], "这一轮的复盘重点暂时没有成功解析出来。"),
+          note=review.get("note") or "这一轮的复盘重点暂时没有成功解析出来。",
+          evaluation=review.get("evaluation") or review.get("note") or "这一轮回答还需要补充更具体的评价。",
+          referenceAnswer=review.get("referenceAnswer") or self._build_fallback_reference_answer(entry),
         ),
       )
-    return normalized, len(notes_by_round)
+    return normalized, len(reviews_by_round)
+
+  def _build_fallback_reference_answer(self, round_entry: Dict[str, Any]) -> str:
+    answer = self._as_text(round_entry.get("answer"))
+    if answer:
+      return "可以按“背景-行动-结果-复盘”重组回答，并补充量化结果与关键取舍。"
+    return "建议先正面回应问题，再用一个具体经历补充做法、结果和反思。"
 
   def _build_round_transcript(self, messages: List[ConversationMessage]) -> List[Dict[str, Any]]:
     questions_by_round: Dict[int, str] = {}

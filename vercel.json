@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build --workspace @interview-hub/web",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}

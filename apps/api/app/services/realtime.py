@@ -10,7 +10,12 @@ import websocket
 
 from app.core.errors import UpstreamServiceError
 
-RealtimeEvent = Union[str, UpstreamServiceError]
+
+class ReplyDone:
+  pass
+
+
+RealtimeEvent = Union[str, UpstreamServiceError, ReplyDone]
 
 
 class SecondMeRealtimeChannel:
@@ -18,7 +23,7 @@ class SecondMeRealtimeChannel:
     self,
     ws_id: str,
     visitor_user_id: str,
-    origin: str,
+    origin: Optional[str],
     heartbeat_interval_seconds: int,
     reply_timeout_seconds: float,
   ) -> None:
@@ -64,12 +69,13 @@ class SecondMeRealtimeChannel:
       await self.close()
       raise UpstreamServiceError("当前无法建立 SecondMe 实时连接，请稍后重试。") from self._connect_error
 
-    self._heartbeat_thread = threading.Thread(
-      target=self._run_heartbeat_loop,
-      name=f"secondme-heartbeat-{self._ws_id}",
-      daemon=True,
-    )
-    self._heartbeat_thread.start()
+    if self._heartbeat_interval_seconds > 0 and self._ws_id:
+      self._heartbeat_thread = threading.Thread(
+        target=self._run_heartbeat_loop,
+        name=f"secondme-heartbeat-{self._ws_id}",
+        daemon=True,
+      )
+      self._heartbeat_thread.start()
 
   async def wait_for_reply(self) -> str:
     try:
@@ -82,6 +88,8 @@ class SecondMeRealtimeChannel:
 
     if isinstance(event, UpstreamServiceError):
       raise event
+    if isinstance(event, ReplyDone):
+      return ""
 
     merged_reply = event
     while True:
@@ -95,6 +103,8 @@ class SecondMeRealtimeChannel:
 
       if isinstance(next_event, UpstreamServiceError):
         raise next_event
+      if isinstance(next_event, ReplyDone):
+        return merged_reply.strip()
       merged_reply = self._merge_reply_chunk(merged_reply, next_event)
 
   async def close(self) -> None:
@@ -117,7 +127,10 @@ class SecondMeRealtimeChannel:
       return
 
     try:
-      self._app.run_forever(origin=self._origin)
+      if self._origin:
+        self._app.run_forever(origin=self._origin)
+      else:
+        self._app.run_forever()
     except Exception as exc:
       self._connect_error = exc
       self._connect_event.set()
@@ -141,6 +154,9 @@ class SecondMeRealtimeChannel:
   def _on_message(self, _: websocket.WebSocketApp, raw_message: str) -> None:
     with contextlib.suppress(json.JSONDecodeError):
       payload = json.loads(raw_message)
+      if payload.get("sender") == "umm" and payload.get("index") == -1:
+        self._push_event(ReplyDone())
+        return
       answer = self._extract_answer(payload)
       if answer:
         self._push_event(answer)
@@ -182,7 +198,7 @@ class SecondMeRealtimeChannel:
     if sender == "umm":
       return self._extract_multiple_data_answer(payload)
 
-    if sender == "client" and payload.get("sendUserId") != self._visitor_user_id:
+    if self._visitor_user_id and sender == "client" and payload.get("sendUserId") != self._visitor_user_id:
       return self._extract_multiple_data_answer(payload)
 
     return None

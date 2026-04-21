@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Union
+
+from app.models.api import InterviewerProvider
 
 
 @dataclass
@@ -29,9 +32,29 @@ class SecondMeSocketInfo:
 
 
 @dataclass
-class SessionRuntime:
+class SecondMeLegacyRuntime:
+  provider: InterviewerProvider
   secondme_session_id: str
   auth: SecondMeAuthContext
   chat: SecondMeChatContext
   socket: SecondMeSocketInfo
   next_index: int = 1
+
+
+@dataclass
+class SecondMeVisitorChatRuntime:
+  provider: InterviewerProvider
+  session_id: str
+  access_token: str
+  api_key: str
+  visitor_id: str
+  visitor_name: str
+
+
+@dataclass
+class DoubaoRuntime:
+  provider: InterviewerProvider
+  model: str
+
+
+SessionRuntime = Union[SecondMeLegacyRuntime, SecondMeVisitorChatRuntime, DoubaoRuntime]

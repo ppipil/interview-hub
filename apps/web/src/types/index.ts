@@ -9,6 +9,7 @@ export const INTERVIEW_ROLES = [
 export const INTERVIEW_MODES = ["guided", "real"] as const;
 
 export const INTERVIEWER_TYPES = ["system", "avatar"] as const;
+export const INTERVIEWER_PROVIDERS = ["doubao", "secondme_legacy", "secondme_visitor"] as const;
 
 export const SESSION_STATUSES = [
   "pending",
@@ -26,6 +27,7 @@ export const INTERVIEW_STAGES = ["home", "setup", "interview", "feedback"] as co
 export type InterviewRole = (typeof INTERVIEW_ROLES)[number];
 export type InterviewMode = (typeof INTERVIEW_MODES)[number];
 export type InterviewerType = (typeof INTERVIEWER_TYPES)[number];
+export type InterviewerProvider = (typeof INTERVIEWER_PROVIDERS)[number];
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 export type MessageRole = (typeof MESSAGE_ROLES)[number];
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
@@ -53,6 +55,7 @@ export interface ErrorResponse {
 export interface Interviewer {
   id: string;
   type: InterviewerType;
+  provider: InterviewerProvider;
   name: string;
   title: string;
   description: string;
@@ -61,6 +64,37 @@ export interface Interviewer {
   supportedRoles?: InterviewRole[];
   supportedModes: InterviewMode[];
   persona?: string | null;
+  promptStrategy?: string | null;
+  skillPrompt?: string | null;
+  interviewFlow?: string | null;
+}
+
+export interface AdminInterviewer extends Interviewer {
+  enabled: boolean;
+  profileExists: boolean;
+  hasAvatarApiKey: boolean;
+  avatarApiKey?: string | null;
+  avatarApiKeyMasked?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface UpsertAdminInterviewerRequest {
+  id: string;
+  type: InterviewerType;
+  provider?: InterviewerProvider | null;
+  name: string;
+  title: string;
+  description: string;
+  avatarUrl?: string | null;
+  tags: string[];
+  supportedRoles: InterviewRole[];
+  supportedModes: InterviewMode[];
+  persona?: string | null;
+  promptStrategy?: string | null;
+  skillPrompt?: string | null;
+  interviewFlow?: string | null;
+  avatarApiKey?: string | null;
+  enabled: boolean;
 }
 
 export interface Session {
@@ -120,6 +154,8 @@ export interface RoundReview {
   question: string;
   answer: string;
   note: string;
+  evaluation: string;
+  referenceAnswer: string;
 }
 
 export interface InterviewFeedback {
