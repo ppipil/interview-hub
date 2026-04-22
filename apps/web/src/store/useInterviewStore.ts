@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import { ApiClientError, interviewApi } from "../services/api";
+import { navigateToStage } from "../lib/navigation";
 import type {
   CreateSessionResponse,
   InterviewFeedback,
@@ -55,7 +56,7 @@ export interface InterviewStoreState {
   sendMessageError: string | null;
   feedbackStatus: RequestStatus;
   feedbackError: string | null;
-  setStage: (stage: InterviewStage) => void;
+  setStage: (stage: InterviewStage, options?: { updateUrl?: boolean; replace?: boolean }) => void;
   updateSetup: (patch: Partial<InterviewSetupDraft>) => void;
   fetchInterviewers: (role?: InterviewRole) => Promise<Interviewer[]>;
   startInterview: () => Promise<CreateSessionResponse | null>;
@@ -82,8 +83,11 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
   feedbackStatus: "idle",
   feedbackError: null,
 
-  setStage: (stage) => {
+  setStage: (stage, options) => {
     set({ stage });
+    if (options?.updateUrl !== false) {
+      navigateToStage(stage, { replace: options?.replace });
+    }
   },
 
   updateSetup: (patch) => {
@@ -184,6 +188,7 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
         sendMessageStatus: "idle",
         feedbackStatus: "idle",
       });
+      navigateToStage("interview");
 
       return response.data;
     } catch (error) {
@@ -219,14 +224,21 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
         clientMessageId: crypto.randomUUID(),
       });
 
-      set((state) => ({
-        session: response.data.session,
-        messages: response.data.assistantMessage
-          ? [...state.messages, response.data.userMessage, response.data.assistantMessage]
-          : [...state.messages, response.data.userMessage],
-        sendMessageStatus: "success",
-        stage: response.data.shouldFetchFeedback ? "feedback" : state.stage,
-      }));
+      set((state) => {
+        const nextStage = response.data.shouldFetchFeedback ? "feedback" : state.stage;
+        if (nextStage !== state.stage) {
+          navigateToStage(nextStage);
+        }
+
+        return {
+          session: response.data.session,
+          messages: response.data.assistantMessage
+            ? [...state.messages, response.data.userMessage, response.data.assistantMessage]
+            : [...state.messages, response.data.userMessage],
+          sendMessageStatus: "success",
+          stage: nextStage,
+        };
+      });
 
       return response.data;
     } catch (error) {
@@ -264,6 +276,7 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
         feedback: response.data,
         feedbackStatus: "success",
       });
+      navigateToStage("feedback", { replace: true });
 
       return response.data;
     } catch (error) {
@@ -294,6 +307,7 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
         totalRounds: clampRounds(state.setup.totalRounds),
       },
     }));
+    navigateToStage("setup");
   },
 
   resetAll: () => {
@@ -314,6 +328,7 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
       feedbackStatus: "idle",
       feedbackError: null,
     });
+    navigateToStage("home");
   },
 }));
 

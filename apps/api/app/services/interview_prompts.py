@@ -18,6 +18,41 @@ MODE_LABELS: Dict[InterviewMode, str] = {
   "real": "真实模式",
 }
 
+INTERNAL_PROMPT_MARKERS = (
+  "【Interview Hub 面试官 Skill】",
+  "【Skill 结束】",
+  "【当前阶段任务卡】",
+  "【任务卡结束】",
+  "当前阶段任务卡是流程硬约束",
+  "硬性规则：",
+  "流程规则：",
+  "只输出一个问题本身",
+  "面试官 Skill 只用于决定",
+  "请严格执行当前阶段任务卡",
+  "候选人刚才针对",
+)
+
+_NON_PUBLIC_QUESTION_TERMS = (
+  "Interview Hub",
+  "Skill",
+  "任务卡",
+  "硬性规则",
+  "流程规则",
+  "当前轮次",
+  "只输出",
+  "不要",
+  "不能",
+  "候选人刚才",
+  "本次模式",
+  "整场共",
+  "你是 ",
+  "面试官 Skill",
+  "模式为",
+  "风格要求",
+  "目的：",
+  "目标：",
+)
+
 
 def build_avatar_bootstrap_prompt(
   interviewer: Interviewer,
@@ -101,6 +136,52 @@ def build_system_follow_up_prompt(
   )
 
 
+def sanitize_interviewer_question(raw_question: str, fallback: str = "") -> str:
+  """Prevent internal orchestration prompts from being shown as interview questions."""
+  text = (raw_question or "").strip()
+  if not text:
+    return ""
+
+  if not _looks_like_internal_prompt(text):
+    return text
+
+  extracted = (
+    _extract_question_after_last_marker(text)
+    or _extract_question_from_stage_card(text)
+    or _extract_question_candidate(text)
+  )
+  cleaned = (extracted or fallback).strip()
+  if cleaned and not _looks_like_internal_prompt(cleaned):
+    return cleaned
+  return fallback.strip()
+
+
+def build_fallback_interviewer_question(
+  interviewer: Interviewer,
+  role: InterviewRole,
+  current_round: int,
+  total_rounds: int,
+) -> str:
+  role_label = ROLE_LABELS[role]
+  stage = _select_stage(
+    (interviewer.interviewFlow or "").strip(),
+    current_round=current_round,
+    total_rounds=total_rounds,
+  )
+
+  if current_round <= 1 or "自我介绍" in stage or "背景" in stage:
+    return f"请简要介绍一下你的背景，以及最近一个与{role_label}岗位相关的项目经历。"
+  if "算法" in stage or "数据结构" in stage:
+    return "请讲一道你熟悉的数据结构或算法题，并说明你的解法、复杂度和边界情况。"
+  if "系统设计" in stage or "架构" in stage or "高并发" in stage:
+    return "请设计一个高并发业务系统，并说明架构拆分、缓存策略和可用性保障。"
+  if "行为" in stage or "STAR" in stage or "协作" in stage:
+    return "请用 STAR 方法描述一次你解决技术难题或推动团队协作的经历。"
+  if "总结" in stage or "提问" in stage:
+    return "你还有哪些想补充的项目亮点，或者有什么想问面试官的问题？"
+  return f"请结合你的{role_label}经历，说明一个关键项目难点、你的解决思路和最终结果。"
+
+
 def _format_skill_prompt(interviewer: Interviewer) -> str:
   skill_prompt = (interviewer.skillPrompt or "").strip()
   if not skill_prompt:
@@ -158,3 +239,57 @@ def _extract_numbered_stages(interview_flow: str) -> list[str]:
     if stage:
       stages.append(stage)
   return stages
+
+
+def _looks_like_internal_prompt(text: str) -> bool:
+  return any(marker in text for marker in INTERNAL_PROMPT_MARKERS)
+
+
+def _extract_question_after_last_marker(text: str) -> str:
+  marker_positions = [text.rfind(marker) + len(marker) for marker in INTERNAL_PROMPT_MARKERS if marker in text]
+  if not marker_positions:
+    return ""
+  tail = text[max(marker_positions):].strip()
+  return _extract_question_candidate(tail)
+
+
+def _extract_question_from_stage_card(text: str) -> str:
+  match = re.search(r"【当前阶段任务卡】(?P<section>.*?)【任务卡结束】", text, re.S)
+  if not match:
+    return ""
+  return _extract_question_candidate(match.group("section"))
+
+
+def _extract_question_candidate(text: str) -> str:
+  for candidate in re.findall(r"[“\"]([^”\"]{4,180})[”\"]", text):
+    normalized = _normalize_question_candidate(candidate)
+    if _is_public_question_candidate(normalized):
+      return normalized
+
+  for line in text.splitlines():
+    normalized = _normalize_question_candidate(line)
+    if _is_public_question_candidate(normalized):
+      return normalized
+
+  for sentence in re.findall(r"[^。！？!?；;\n]{4,180}[？?。]", text):
+    normalized = _normalize_question_candidate(sentence)
+    if _is_public_question_candidate(normalized):
+      return normalized
+
+  return ""
+
+
+def _normalize_question_candidate(candidate: str) -> str:
+  normalized = candidate.strip()
+  normalized = re.sub(r"^[\s\-*•（(]*\d+[).、]\s*", "", normalized)
+  normalized = re.sub(r"^(?:问题|提问|问题方向|示例问题)\s*[:：]\s*", "", normalized)
+  normalized = normalized.strip(" \n\r\t\"'“”《》")
+  return normalized
+
+
+def _is_public_question_candidate(candidate: str) -> bool:
+  if len(candidate) < 4:
+    return False
+  if any(term in candidate for term in _NON_PUBLIC_QUESTION_TERMS):
+    return False
+  return "？" in candidate or "?" in candidate or candidate.startswith("请")

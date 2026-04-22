@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import json
 import threading
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 import websocket
 
@@ -16,6 +16,21 @@ class ReplyDone:
 
 
 RealtimeEvent = Union[str, UpstreamServiceError, ReplyDone]
+
+INTERNAL_PROMPT_MARKERS = (
+  "【Interview Hub 面试官 Skill】",
+  "【Skill 结束】",
+  "【当前阶段任务卡】",
+  "【任务卡结束】",
+  "当前阶段任务卡是流程硬约束",
+  "请严格执行当前阶段任务卡",
+  "只输出一个问题本身",
+  "不要自我介绍，不要解释流程",
+  "候选人刚才针对",
+  "现在这场模拟面试已经结束",
+  "JSON 字段必须严格使用以下 key",
+  "只返回一个可解析",
+)
 
 
 class SecondMeRealtimeChannel:
@@ -77,10 +92,11 @@ class SecondMeRealtimeChannel:
       )
       self._heartbeat_thread.start()
 
-  async def wait_for_reply(self) -> str:
+  async def wait_for_reply(self, ignored_texts: Optional[Sequence[str]] = None) -> str:
     loop = asyncio.get_running_loop()
     deadline = loop.time() + self._reply_timeout_seconds
     merged_reply = ""
+    ignored_replies = self._normalize_ignored_texts(ignored_texts)
 
     while True:
       timeout_seconds = self._stream_idle_timeout_seconds if merged_reply else max(0.0, deadline - loop.time())
@@ -91,24 +107,34 @@ class SecondMeRealtimeChannel:
         )
       except asyncio.TimeoutError as exc:
         if merged_reply:
-          return self._ensure_non_empty_reply(merged_reply)
+          return self._ensure_non_empty_reply(merged_reply, ignored_replies)
         raise UpstreamServiceError("等待 SecondMe 回复超时。") from exc
 
       if isinstance(event, UpstreamServiceError):
         raise event
       if isinstance(event, ReplyDone):
         if merged_reply:
-          return self._ensure_non_empty_reply(merged_reply)
+          return self._ensure_non_empty_reply(merged_reply, ignored_replies)
         # Visitor Chat may emit a done/control event before the content event
         # that the official app eventually renders. Keep listening instead of
         # saving an empty question.
         if loop.time() >= deadline:
           raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
         continue
-      merged_reply = self._merge_reply_chunk(merged_reply, event)
+      if self._should_ignore_reply_text(event, ignored_replies):
+        if self._is_ignored_reply_fragment(merged_reply, ignored_replies):
+          merged_reply = ""
+        continue
+
+      next_reply = self._merge_reply_chunk(merged_reply, event)
+      if self._should_ignore_reply_text(next_reply, ignored_replies):
+        merged_reply = ""
+        continue
+
+      merged_reply = next_reply
 
       if loop.time() >= deadline:
-        return merged_reply.strip()
+        return self._ensure_non_empty_reply(merged_reply, ignored_replies)
 
   async def close(self) -> None:
     self._stop_event.set()
@@ -258,10 +284,51 @@ class SecondMeRealtimeChannel:
         return f"{current}{next_chunk[overlap:]}"
     return f"{current}{next_chunk}"
 
-  def _ensure_non_empty_reply(self, reply: str) -> str:
+  def _normalize_ignored_texts(self, ignored_texts: Optional[Sequence[str]]) -> tuple[str, ...]:
+    if not ignored_texts:
+      return ()
+
+    return tuple(
+      normalized
+      for item in ignored_texts
+      for normalized in [self._normalize_reply_for_compare(item)]
+      if normalized
+    )
+
+  def _should_ignore_reply_text(self, reply: str, ignored_replies: Sequence[str]) -> bool:
+    normalized = self._normalize_reply_for_compare(reply)
+    if not normalized:
+      return False
+
+    if any(marker in normalized for marker in INTERNAL_PROMPT_MARKERS):
+      return True
+
+    for ignored_reply in ignored_replies:
+      if normalized == ignored_reply:
+        return True
+      if self._is_ignored_reply_fragment(normalized, ignored_replies):
+        return True
+      if len(ignored_reply) >= 80 and ignored_reply in normalized:
+        return True
+
+    return False
+
+  def _is_ignored_reply_fragment(self, reply: str, ignored_replies: Sequence[str]) -> bool:
+    normalized = self._normalize_reply_for_compare(reply)
+    if len(normalized) < 20:
+      return False
+
+    return any(ignored_reply.startswith(normalized) for ignored_reply in ignored_replies)
+
+  def _normalize_reply_for_compare(self, reply: str) -> str:
+    return " ".join(str(reply or "").split())
+
+  def _ensure_non_empty_reply(self, reply: str, ignored_replies: Sequence[str]) -> str:
     normalized = reply.strip()
     if not normalized:
       raise UpstreamServiceError("SecondMe 实时回复为空，请稍后重试。", code="SECONDME_EMPTY_REPLY")
+    if self._should_ignore_reply_text(normalized, ignored_replies):
+      raise UpstreamServiceError("SecondMe 实时回复疑似回显了内部 Prompt，请稍后重试。", code="SECONDME_PROMPT_ECHO_REPLY")
     return normalized
 
   def _join_thread(self, thread: Optional[threading.Thread]) -> None:

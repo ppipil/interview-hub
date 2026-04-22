@@ -21,6 +21,7 @@ from app.repositories.in_memory import InMemorySessionRepository
 from app.repositories.persistence import PersistenceRepository
 from app.services.catalog import InterviewerCatalog
 from app.services.interview_provider import InterviewProviderRegistry
+from app.services.interview_prompts import build_fallback_interviewer_question, sanitize_interviewer_question
 
 
 class InterviewService:
@@ -64,7 +65,15 @@ class InterviewService:
       mode=payload.mode,
       total_rounds=total_rounds,
     )
-    first_question_text = bootstrap.first_question_text.strip()
+    first_question_text = sanitize_interviewer_question(
+      bootstrap.first_question_text,
+      fallback=build_fallback_interviewer_question(
+        interviewer=interviewer,
+        role=payload.role,
+        current_round=1,
+        total_rounds=total_rounds,
+      ),
+    )
     if not first_question_text:
       raise UpstreamServiceError(
         "面试官没有返回有效的首轮问题，请稍后重试或切换面试官。",
@@ -148,6 +157,7 @@ class InterviewService:
         shouldFetchFeedback=True,
       )
 
+    next_round = session.currentRound + 1
     assistant_reply = await provider.follow_up(
       interviewer=interviewer,
       session=session,
@@ -155,14 +165,21 @@ class InterviewService:
       channel=channel,
       answer=content,
     )
-    assistant_reply = assistant_reply.strip()
+    assistant_reply = sanitize_interviewer_question(
+      assistant_reply,
+      fallback=build_fallback_interviewer_question(
+        interviewer=interviewer,
+        role=session.role,
+        current_round=next_round,
+        total_rounds=session.totalRounds,
+      ),
+    )
     if not assistant_reply:
       raise UpstreamServiceError(
         "面试官没有返回有效问题，请稍后重试或切换面试官。",
         code="INTERVIEWER_EMPTY_FOLLOW_UP",
       )
 
-    next_round = session.currentRound + 1
     assistant_message = ConversationMessage(
       id=str(uuid4()),
       role="assistant",

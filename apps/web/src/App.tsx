@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useInterviewStore } from "./store/useInterviewStore";
+import { getStageFromPathname, normalizePathname } from "./lib/navigation";
 import { HomePage } from "./pages/HomePage";
 import { SetupPage } from "./pages/SetupPage";
 import { InterviewPage } from "./pages/InterviewPage";
@@ -10,7 +11,11 @@ import { InterviewerQuestionnairePage } from "./pages/InterviewerQuestionnairePa
 
 const App = () => {
   const stage = useInterviewStore((state) => state.stage);
+  const setStage = useInterviewStore((state) => state.setStage);
   const [pathname, setPathname] = useState(() => window.location.pathname);
+  const normalizedPathname = normalizePathname(pathname);
+  const routedStage = getStageFromPathname(normalizedPathname);
+  const activeStage = routedStage ?? stage;
 
   useEffect(() => {
     const syncPathname = () => setPathname(window.location.pathname);
@@ -19,15 +24,21 @@ const App = () => {
     return () => window.removeEventListener("popstate", syncPathname);
   }, []);
 
-  if (pathname === "/admin/interviewers") {
+  useEffect(() => {
+    if (routedStage && routedStage !== stage) {
+      setStage(routedStage, { updateUrl: false });
+    }
+  }, [routedStage, setStage, stage]);
+
+  if (normalizedPathname === "/admin/interviewers") {
     return <AdminInterviewersPage />;
   }
 
-  if (pathname === "/interviewer-questionnaire") {
+  if (normalizedPathname === "/interviewer-questionnaire") {
     return <InterviewerQuestionnairePage />;
   }
 
-  switch (stage) {
+  switch (activeStage) {
     case "home":
       return <HomePage />;
     case "setup":

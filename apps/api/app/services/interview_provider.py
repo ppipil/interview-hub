@@ -171,7 +171,7 @@ class LegacySecondMeInterviewProvider:
         content=prompt,
         index=0,
       )
-      first_question_text = await channel.wait_for_reply()
+      first_question_text = await channel.wait_for_reply(ignored_texts=[prompt])
     except Exception:
       await channel.close()
       raise
@@ -201,6 +201,14 @@ class LegacySecondMeInterviewProvider:
       raise UpstreamServiceError("SecondMe Legacy 运行时缺失，无法继续面试。", code="SECONDME_LEGACY_RUNTIME_ERROR")
 
     next_round = session.currentRound + 1
+    prompt = build_avatar_follow_up_prompt(
+      interviewer=interviewer,
+      role=session.role,
+      mode=session.mode,
+      next_round=next_round,
+      total_rounds=session.totalRounds,
+      answer=answer,
+    )
     await self._secondme_client.send_message(
       visitor_token=runtime.auth.visitor_token,
       visitor_id=runtime.auth.visitor_id,
@@ -208,18 +216,11 @@ class LegacySecondMeInterviewProvider:
       visitor_user_id=runtime.auth.visitor_user_id,
       mind_id=runtime.chat.mind_id,
       ws_id=runtime.socket.ws_id,
-      content=build_avatar_follow_up_prompt(
-        interviewer=interviewer,
-        role=session.role,
-        mode=session.mode,
-        next_round=next_round,
-        total_rounds=session.totalRounds,
-        answer=answer,
-      ),
+      content=prompt,
       index=runtime.next_index,
     )
     runtime.next_index += 1
-    return await channel.wait_for_reply()
+    return await channel.wait_for_reply(ignored_texts=[prompt])
 
   async def generate_feedback(
     self,
@@ -272,7 +273,7 @@ class LegacySecondMeInterviewProvider:
       index=runtime.next_index,
     )
     runtime.next_index += 1
-    return await channel.wait_for_reply()
+    return await channel.wait_for_reply(ignored_texts=[content])
 
 
 class SecondMeVisitorInterviewProvider:
@@ -320,13 +321,14 @@ class SecondMeVisitorInterviewProvider:
     )
     await channel.connect(chat.ws_url)
     try:
+      prompt = build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds)
       await self._visitor_client.send_message(
         access_token=chat.access_token,
         session_id=chat.session_id,
         avatar_api_key=avatar_api_key,
-        message=build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds),
+        message=prompt,
       )
-      first_question_text = await channel.wait_for_reply()
+      first_question_text = await channel.wait_for_reply(ignored_texts=[prompt])
     except Exception:
       await channel.close()
       raise
@@ -356,20 +358,21 @@ class SecondMeVisitorInterviewProvider:
       raise UpstreamServiceError("SecondMe Visitor Chat 运行时缺失，无法继续面试。", code="SECONDME_VISITOR_RUNTIME_ERROR")
 
     next_round = session.currentRound + 1
+    prompt = build_avatar_follow_up_prompt(
+      interviewer=interviewer,
+      role=session.role,
+      mode=session.mode,
+      next_round=next_round,
+      total_rounds=session.totalRounds,
+      answer=answer,
+    )
     await self._visitor_client.send_message(
       access_token=runtime.access_token,
       session_id=runtime.session_id,
       avatar_api_key=runtime.api_key,
-      message=build_avatar_follow_up_prompt(
-        interviewer=interviewer,
-        role=session.role,
-        mode=session.mode,
-        next_round=next_round,
-        total_rounds=session.totalRounds,
-        answer=answer,
-      ),
+      message=prompt,
     )
-    return await channel.wait_for_reply()
+    return await channel.wait_for_reply(ignored_texts=[prompt])
 
   async def generate_feedback(
     self,
@@ -417,7 +420,7 @@ class SecondMeVisitorInterviewProvider:
       avatar_api_key=runtime.api_key,
       message=content,
     )
-    return await channel.wait_for_reply()
+    return await channel.wait_for_reply(ignored_texts=[content])
 
   def _resolve_avatar_api_key(self, interviewer_id: str) -> str:
     profile = next(

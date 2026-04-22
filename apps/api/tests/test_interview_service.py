@@ -23,7 +23,11 @@ from app.repositories.sqlite_persistence import SqlitePersistenceRepository
 from app.services.admin_interviewers import AdminInterviewerService
 from app.services.catalog import InterviewerCatalog
 from app.services.interview import InterviewService
-from app.services.interview_prompts import build_avatar_bootstrap_prompt, build_avatar_follow_up_prompt
+from app.services.interview_prompts import (
+  build_avatar_bootstrap_prompt,
+  build_avatar_follow_up_prompt,
+  sanitize_interviewer_question,
+)
 from app.services.interview_provider import InterviewProviderRegistry, ProviderBootstrapResult
 
 
@@ -98,6 +102,27 @@ class EmptyBootstrapProvider(FakeProvider):
 
   async def close(self, runtime, channel):
     _ = (runtime, channel)
+
+
+class PromptEchoProvider(FakeProvider):
+  async def bootstrap(self, interviewer, role, mode, total_rounds):
+    result = await super().bootstrap(interviewer, role, mode, total_rounds)
+    return ProviderBootstrapResult(
+      first_question_text=build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds),
+      runtime=result.runtime,
+      channel=result.channel,
+    )
+
+  async def follow_up(self, interviewer, session, runtime, channel, answer):
+    _ = (runtime, channel)
+    return build_avatar_follow_up_prompt(
+      interviewer=interviewer,
+      role=session.role,
+      mode=session.mode,
+      next_round=session.currentRound + 1,
+      total_rounds=session.totalRounds,
+      answer=answer,
+    )
 
 
 class FakePersistenceRepository(NullPersistenceRepository):
@@ -243,6 +268,40 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(ctx.exception.code, "INTERVIEWER_EMPTY_FIRST_QUESTION")
 
+  async def test_internal_prompt_echo_is_sanitized_before_returning(self) -> None:
+    service = InterviewService(
+      settings=build_settings(),
+      repository=InMemorySessionRepository(),
+      persistence=NullPersistenceRepository(),
+      catalog=self.catalog,
+      providers=InterviewProviderRegistry([PromptEchoProvider("doubao"), self.avatar_provider]),
+    )
+
+    create_response = await service.create_session(
+      payload=CreateSessionRequest(
+        role="frontend",
+        mode="guided",
+        interviewerId="system_tech",
+        totalRounds=3,
+      )
+    )
+    self.assertEqual(
+      create_response.firstQuestion.content,
+      "请简要介绍一下你的背景，以及最近一个与前端工程师岗位相关的项目经历。",
+    )
+    self.assertNotIn("【当前阶段任务卡】", create_response.firstQuestion.content)
+
+    follow_up_response = await service.send_message(
+      create_response.session.id,
+      payload=SendMessageRequest(content="我做过一个中后台项目。"),
+    )
+
+    self.assertEqual(
+      follow_up_response.assistantMessage.content,
+      "请结合你的前端工程师经历，说明一个关键项目难点、你的解决思路和最终结果。",
+    )
+    self.assertNotIn("候选人刚才", follow_up_response.assistantMessage.content)
+
   async def test_round_validation_rejects_out_of_range_values(self) -> None:
     with self.assertRaises(ValidationError):
       await self.service.create_session(
@@ -334,6 +393,26 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     )
     self.assertIn("第2阶段：算法与数据结构", follow_up_prompt)
     self.assertIn("不能跳到其他阶段", follow_up_prompt)
+
+  def test_prompt_echo_sanitizer_extracts_stage_question(self) -> None:
+    leaked_prompt = (
+      "【Interview Hub 面试官 Skill】\n"
+      "阿里后端面试官分身\n"
+      "【Skill 结束】\n"
+      "【当前阶段任务卡】\n"
+      "当前轮次：第 1 / 5 轮。\n"
+      "第1阶段：自我介绍与背景了解\n"
+      "问题：\n"
+      "“请简要介绍一下你的背景和之前的工作经历。”\n"
+      "“你在前一个项目中使用的技术栈是什么？有什么技术难题？”\n"
+      "硬性规则：只能执行本阶段任务；不能跳到其他阶段；只能问一个问题。\n"
+      "【任务卡结束】"
+    )
+
+    self.assertEqual(
+      sanitize_interviewer_question(leaked_prompt, fallback="请介绍一下你自己。"),
+      "请简要介绍一下你的背景和之前的工作经历。",
+    )
 
 
 class SqlitePersistenceRepositoryTests(unittest.TestCase):

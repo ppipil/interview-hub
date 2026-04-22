@@ -313,14 +313,11 @@ export const InterviewerQuestionnairePage = () => {
     });
     updateSetup({ interviewerId: createdInterviewer.id });
     setStage("setup");
-    window.history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
   const sourceLabel = form.avatarApiKey.trim() ? "SecondMe 分身面试官" : "豆包系统面试官";
   const goHome = () => {
-    window.history.pushState({}, "", "/");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    setStage("home");
   };
 
   return (

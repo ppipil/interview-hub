@@ -3,12 +3,12 @@ import { ClipboardList } from "lucide-react";
 import { AppShell } from "../components/ui/AppShell";
 import { HeroEntry } from "../components/features/home/HeroEntry";
 import { useInterviewStore } from "../store/useInterviewStore";
+import { navigateToPath } from "../lib/navigation";
 
 export const HomePage = () => {
   const setStage = useInterviewStore((state) => state.setStage);
   const openQuestionnaire = () => {
-    window.history.pushState({}, "", "/interviewer-questionnaire");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigateToPath("/interviewer-questionnaire");
   };
 
   return (
