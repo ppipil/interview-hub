@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { AppShell } from "../components/ui/AppShell";
 import { Button } from "../components/ui/Button";
@@ -21,9 +21,14 @@ export const SetupPage = () => {
   const resetInterview = useInterviewStore((state) => state.resetInterview);
   const resetAll = useInterviewStore((state) => state.resetAll);
   const canStart = useInterviewStore(selectCanStartInterview);
+  const fetchedRoleRef = useRef<string | null>(null);
 
   useEffect(() => {
-    void fetchInterviewers(setup.role ?? undefined);
+    if (!setup.role || fetchedRoleRef.current === setup.role) {
+      return;
+    }
+    fetchedRoleRef.current = setup.role;
+    void fetchInterviewers(setup.role);
   }, [fetchInterviewers, setup.role]);
 
   return (
