@@ -114,7 +114,7 @@ def get_settings() -> Settings:
     ),
     cors_origin_regex=_read_regex_env(
       "BACKEND_CORS_ORIGIN_REGEX",
-      r"https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[A-Za-z0-9-]+\.netlify\.app",
+      r"https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[A-Za-z0-9-]+\.(netlify|vercel)\.app",
     ),
     database_url=_read_env("DATABASE_URL"),
     secondme_base_url=_read_env("SECONDME_BASE_URL", "https://mindos-prek8s.mindverse.ai/gate/in"),
