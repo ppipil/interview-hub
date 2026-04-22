@@ -122,8 +122,7 @@ export const useInterviewStore = create<InterviewStoreState>((set, get) => ({
     });
 
     try {
-      const activeRole = role ?? get().setup.role ?? undefined;
-      const response = await interviewApi.getInterviewers(activeRole);
+      const response = await interviewApi.getInterviewers(role);
       const interviewerIds = new Set(response.data.map((interviewer) => interviewer.id));
 
       set((state) => ({

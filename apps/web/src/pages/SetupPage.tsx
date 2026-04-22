@@ -21,15 +21,21 @@ export const SetupPage = () => {
   const resetInterview = useInterviewStore((state) => state.resetInterview);
   const resetAll = useInterviewStore((state) => state.resetAll);
   const canStart = useInterviewStore(selectCanStartInterview);
-  const fetchedRoleRef = useRef<string | null>(null);
+  const hasFetchedInterviewersRef = useRef(false);
+  const selectedRole = setup.role;
+  const visibleInterviewers = selectedRole
+    ? interviewers.filter((interviewer) =>
+        !interviewer.supportedRoles?.length || interviewer.supportedRoles.includes(selectedRole),
+      )
+    : interviewers;
 
   useEffect(() => {
-    if (!setup.role || fetchedRoleRef.current === setup.role) {
+    if (hasFetchedInterviewersRef.current) {
       return;
     }
-    fetchedRoleRef.current = setup.role;
-    void fetchInterviewers(setup.role);
-  }, [fetchInterviewers, setup.role]);
+    hasFetchedInterviewersRef.current = true;
+    void fetchInterviewers();
+  }, [fetchInterviewers]);
 
   return (
     <AppShell
@@ -55,7 +61,7 @@ export const SetupPage = () => {
           onSelect={(totalRounds) => updateSetup({ totalRounds })}
         />
         <InterviewerPicker
-          interviewers={interviewers}
+          interviewers={visibleInterviewers}
           selectedInterviewerId={setup.interviewerId}
           isLoading={interviewersStatus === "loading"}
           error={interviewersError}
