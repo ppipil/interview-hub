@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { adminApi } from "../services/api";
@@ -115,6 +115,8 @@ export const AdminInterviewersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isAvatarKeyVisible, setIsAvatarKeyVisible] = useState(false);
+  const initialLoadStartedRef = useRef(false);
+  const loadPromiseRef = useRef<Promise<AdminInterviewer[]> | null>(null);
 
   const selectedInterviewer = useMemo(
     () => interviewers.find((item) => item.id === selectedId) ?? null,
@@ -123,24 +125,40 @@ export const AdminInterviewersPage = () => {
   const hasFullAvatarApiKey = form.avatarApiKey.trim().length > 0;
 
   const loadInterviewers = async () => {
+    if (loadPromiseRef.current) {
+      return loadPromiseRef.current;
+    }
+
     setRequestState("loading");
     setError(null);
-    try {
-      const response = await adminApi.getInterviewers();
-      setInterviewers(response.data);
-      if (!selectedId && response.data[0]) {
-        setSelectedId(response.data[0].id);
-        setForm(formFromInterviewer(response.data[0]));
+    const loadPromise = adminApi.getInterviewers().then((response) => {
+      const nextInterviewers = response.data;
+      setInterviewers(nextInterviewers);
+      if (!selectedId && nextInterviewers[0]) {
+        setSelectedId(nextInterviewers[0].id);
+        setForm(formFromInterviewer(nextInterviewers[0]));
         setIsCreating(false);
       }
+      return nextInterviewers;
+    });
+
+    loadPromiseRef.current = loadPromise;
+    try {
+      return await loadPromise;
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "管理台加载失败。");
+      return [];
     } finally {
+      loadPromiseRef.current = null;
       setRequestState("idle");
     }
   };
 
   useEffect(() => {
+    if (initialLoadStartedRef.current) {
+      return;
+    }
+    initialLoadStartedRef.current = true;
     void loadInterviewers();
   }, []);
 
