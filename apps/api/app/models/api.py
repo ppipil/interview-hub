@@ -10,6 +10,8 @@ InterviewerType = Literal["system", "avatar"]
 InterviewerProvider = Literal["doubao", "secondme_legacy", "secondme_visitor"]
 SessionStatus = Literal["pending", "in_progress", "completed", "failed"]
 MessageRole = Literal["assistant", "user"]
+InterviewStageKey = Literal["intro", "fundamentals", "project", "system_design", "behavioral", "closing"]
+QuestionBankScopeType = Literal["interviewer", "global"]
 
 
 class ApiErrorDetail(BaseModel):
@@ -65,6 +67,30 @@ class AdminInterviewer(BaseModel):
   avatarApiKey: Optional[str] = None
   avatarApiKeyMasked: Optional[str] = None
   updatedAt: Optional[str] = None
+  ownedQuestions: List["AdminQuestionBankQuestion"] = Field(default_factory=list)
+
+
+class AdminQuestionBankQuestion(BaseModel):
+  id: str
+  scopeType: QuestionBankScopeType
+  interviewerId: Optional[str] = None
+  role: InterviewRole
+  stageKey: InterviewStageKey
+  question: str
+  referenceAnswer: Optional[str] = None
+  tags: List[str] = Field(default_factory=list)
+  enabled: bool = True
+  sortOrder: int
+
+
+class UpsertQuestionBankQuestionRequest(BaseModel):
+  role: InterviewRole
+  stageKey: InterviewStageKey
+  question: str = Field(min_length=1, max_length=2000)
+  referenceAnswer: Optional[str] = Field(default=None, max_length=4000)
+  tags: List[str] = Field(default_factory=list)
+  enabled: bool = True
+  sortOrder: Optional[int] = None
 
 
 class UpsertAdminInterviewerRequest(BaseModel):
@@ -84,6 +110,17 @@ class UpsertAdminInterviewerRequest(BaseModel):
   interviewFlow: Optional[str] = None
   avatarApiKey: Optional[str] = None
   enabled: bool = True
+  ownedQuestions: Optional[List[UpsertQuestionBankQuestionRequest]] = None
+
+
+class UpsertGlobalQuestionBankRequest(BaseModel):
+  role: InterviewRole
+  questions: List[UpsertQuestionBankQuestionRequest] = Field(default_factory=list)
+
+
+class GlobalQuestionBankResponse(BaseModel):
+  role: InterviewRole
+  questions: List[AdminQuestionBankQuestion] = Field(default_factory=list)
 
 
 class Session(BaseModel):
@@ -168,6 +205,10 @@ class AdminInterviewersEnvelope(BaseModel):
 
 class AdminInterviewerEnvelope(BaseModel):
   data: AdminInterviewer
+
+
+class GlobalQuestionBankEnvelope(BaseModel):
+  data: GlobalQuestionBankResponse
 
 
 class CreateSessionEnvelope(BaseModel):

@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from app.models.api import InterviewMode, InterviewRole, InterviewerProvider, InterviewerType
+from app.models.api import (
+  InterviewMode,
+  InterviewRole,
+  InterviewStageKey,
+  InterviewerProvider,
+  InterviewerType,
+  QuestionBankScopeType,
+)
 
 
 @dataclass(frozen=True)
@@ -62,3 +69,45 @@ class QuestionBankEntry:
   question: str
   source_session_id: Optional[str]
   created_at: str
+
+
+@dataclass(frozen=True)
+class FormalQuestionBankWrite:
+  scope_type: QuestionBankScopeType
+  interviewer_id: Optional[str]
+  role: InterviewRole
+  stage_key: InterviewStageKey
+  question: str
+  reference_answer: Optional[str]
+  tags: List[str]
+  enabled: bool
+  sort_order: int
+
+
+@dataclass(frozen=True)
+class FormalQuestionBankEntry:
+  id: str
+  scope_type: QuestionBankScopeType
+  interviewer_id: Optional[str]
+  role: InterviewRole
+  stage_key: InterviewStageKey
+  question: str
+  reference_answer: Optional[str]
+  tags: List[str]
+  enabled: bool
+  sort_order: int
+  created_at: str
+  updated_at: str
+
+
+@dataclass(frozen=True)
+class FormalQuestionUsageEntry:
+  message_id: str
+  session_id: str
+  question_id: str
+  interviewer_id: str
+  role: InterviewRole
+  round_number: int
+  stage_key: InterviewStageKey
+  source_scope: QuestionBankScopeType
+  used_at: str

@@ -4,12 +4,14 @@ import type {
   ErrorResponse,
   CreateSessionRequest,
   CreateSessionResponse,
+  GlobalQuestionBankResponse,
   InterviewFeedback,
   InterviewRole,
   Interviewer,
   SendMessageRequest,
   SendMessageResponse,
   UpsertAdminInterviewerRequest,
+  UpsertGlobalQuestionBankRequest,
 } from "../types";
 
 const isDevelopment = import.meta.env.DEV;
@@ -178,5 +180,14 @@ export const adminApi = {
   deleteInterviewer: (interviewerId: string) =>
     request<null>(`/api/v1/admin/interviewers/${interviewerId}`, {
       method: "DELETE",
+    }),
+
+  getGlobalQuestionBank: (role: InterviewRole) =>
+    request<GlobalQuestionBankResponse>(withQuery("/api/v1/admin/question-bank/global", { role })),
+
+  updateGlobalQuestionBank: (payload: UpsertGlobalQuestionBankRequest) =>
+    request<GlobalQuestionBankResponse>("/api/v1/admin/question-bank/global", {
+      method: "PUT",
+      body: JSON.stringify(payload),
     }),
 };

@@ -74,11 +74,6 @@ export const RoundReviewList = ({ roundReviews }: RoundReviewListProps) => {
           </p>
         </div>
 
-        <div className="rounded-[1.1rem] border border-[#E2DFFF] bg-[#F7F5FF] px-4 py-3">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#4B41E1]">复盘观察</p>
-          <p className="mt-2 text-sm leading-7 text-slate-700 sm:text-[0.95rem]">{currentRound.note}</p>
-        </div>
-
         <div className="rounded-[1.1rem] border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-700">本轮评价</p>
           <p className="mt-2 text-sm leading-7 text-slate-800 sm:text-[0.95rem]">

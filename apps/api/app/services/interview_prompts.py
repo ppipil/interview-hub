@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Dict
+from typing import Dict, Sequence
 
-from app.models.api import InterviewMode, InterviewRole, Interviewer
+from app.models.api import ConversationMessage, InterviewMode, InterviewRole, Interviewer
 
 ROLE_LABELS: Dict[InterviewRole, str] = {
   "frontend": "前端工程师",
@@ -120,17 +120,22 @@ def build_system_follow_up_prompt(
   next_round: int,
   total_rounds: int,
   answer: str,
+  messages: Sequence[ConversationMessage] | None = None,
 ) -> str:
   mode_style = "可以适度提示方向，但仍要像面试官追问" if mode == "guided" else "像真实面试官一样直接追问"
   skill_prompt = _format_skill_prompt(interviewer)
   stage_prompt = _format_stage_prompt(interviewer, current_round=next_round, total_rounds=total_rounds)
+  history_prompt = _format_history_prompt(messages)
   return (
     f"{skill_prompt}"
     f"{stage_prompt}"
+    f"{history_prompt}"
     f"你是 {interviewer.name}，正在模拟一场{ROLE_LABELS[role]}岗位面试。"
     f"当前模式为{MODE_LABELS[mode]}，追问风格要求：{mode_style}。"
     f"候选人刚才的回答是：{answer}\n"
     f"整场共{total_rounds}轮，现在需要提出第{next_round}轮问题。"
+    "必须先避开已问过的问题和已覆盖的考察点；不得把旧问题换一种说法重复再问。"
+    "如果当前阶段已经问过类似问题，请切换到本阶段另一个能力点、追问更深细节，或进入更高阶约束。"
     "请严格执行当前阶段任务卡，并基于候选人刚才的回答提出一个最合理的后续问题。"
     "只输出问题本身，不要复述回答，不要额外点评，不要列点。"
   )
@@ -239,6 +244,39 @@ def _extract_numbered_stages(interview_flow: str) -> list[str]:
     if stage:
       stages.append(stage)
   return stages
+
+
+def _format_history_prompt(messages: Sequence[ConversationMessage] | None) -> str:
+  if not messages:
+    return ""
+
+  asked_questions = [
+    _truncate_for_prompt(message.content)
+    for message in messages
+    if message.role == "assistant" and message.content.strip()
+  ][-8:]
+  recent_messages = [
+    f"{'面试官' if message.role == 'assistant' else '候选人'}：{_truncate_for_prompt(message.content, max_length=180)}"
+    for message in messages[-6:]
+    if message.content.strip()
+  ]
+
+  parts: list[str] = ["【已发生的面试上下文】"]
+  if asked_questions:
+    parts.append("已问过的问题（严禁重复或换壳重复）：")
+    parts.extend(f"- {question}" for question in asked_questions)
+  if recent_messages:
+    parts.append("最近对话：")
+    parts.extend(f"- {message}" for message in recent_messages)
+  parts.append("【上下文结束】")
+  return "\n".join(parts) + "\n"
+
+
+def _truncate_for_prompt(value: str, max_length: int = 220) -> str:
+  compacted = " ".join((value or "").split())
+  if len(compacted) <= max_length:
+    return compacted
+  return f"{compacted[:max_length - 1]}…"
 
 
 def _looks_like_internal_prompt(text: str) -> bool:

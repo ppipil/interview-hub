@@ -19,12 +19,13 @@ class InMemorySessionRepository:
   def create(
     self,
     session: Session,
-    runtime: SessionRuntime,
+    runtime: Optional[SessionRuntime],
     channel: Optional[SecondMeRealtimeChannel],
     first_question: ConversationMessage,
   ) -> None:
     self._sessions[session.id] = session
-    self._runtimes[session.id] = runtime
+    if runtime is not None:
+      self._runtimes[session.id] = runtime
     if channel:
       self._channels[session.id] = channel
     self._messages[session.id] = [first_question]
@@ -58,8 +59,15 @@ class InMemorySessionRepository:
       raise NotFoundError("未找到对应的会话运行时。", field="sessionId")
     return runtime
 
+  def get_optional_runtime(self, session_id: str) -> Optional[SessionRuntime]:
+    self.get_session(session_id)
+    return self._runtimes.get(session_id)
+
   def save_runtime(self, session_id: str, runtime: SessionRuntime) -> None:
     self._runtimes[session_id] = runtime
+
+  def save_channel(self, session_id: str, channel: SecondMeRealtimeChannel) -> None:
+    self._channels[session_id] = channel
 
   def get_channel(self, session_id: str) -> SecondMeRealtimeChannel:
     self.get_session(session_id)

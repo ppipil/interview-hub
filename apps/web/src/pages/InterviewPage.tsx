@@ -39,8 +39,6 @@ export const InterviewPage = () => {
         <div className="space-y-10">
           <QuestionPanel
             question={currentQuestion}
-            mode={session.mode}
-            role={session.role}
             currentRound={session.currentRound}
             totalRounds={session.totalRounds}
           />

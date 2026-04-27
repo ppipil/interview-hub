@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from typing import List, Optional, Protocol
 
-from app.models.api import ConversationMessage, InterviewFeedback, InterviewMode, InterviewRole, Interviewer, Session
-from app.models.persistence import InterviewerProfileEntry, InterviewerSecretEntry, QuestionBankEntry, SecondMeConnectionEntry
+from app.models.api import ConversationMessage, InterviewFeedback, InterviewMode, InterviewRole, InterviewStageKey, Interviewer, Session
+from app.models.persistence import (
+  FormalQuestionBankEntry,
+  FormalQuestionBankWrite,
+  FormalQuestionUsageEntry,
+  InterviewerProfileEntry,
+  InterviewerSecretEntry,
+  QuestionBankEntry,
+  SecondMeConnectionEntry,
+)
 
 
 class PersistenceRepository(Protocol):
@@ -61,6 +69,32 @@ class PersistenceRepository(Protocol):
     mode: Optional[InterviewMode] = None,
     provider: Optional[str] = None,
   ) -> List[QuestionBankEntry]:
+    ...
+
+  def seed_formal_questions(self, questions: List[FormalQuestionBankWrite]) -> None:
+    ...
+
+  def replace_interviewer_question_bank(self, interviewer_id: str, questions: List[FormalQuestionBankWrite]) -> None:
+    ...
+
+  def replace_global_question_bank(self, role: InterviewRole, questions: List[FormalQuestionBankWrite]) -> None:
+    ...
+
+  def list_formal_questions(
+    self,
+    *,
+    scope_type: Optional[str] = None,
+    interviewer_id: Optional[str] = None,
+    role: Optional[InterviewRole] = None,
+    stage_key: Optional[InterviewStageKey] = None,
+    enabled_only: bool = True,
+  ) -> List[FormalQuestionBankEntry]:
+    ...
+
+  def save_formal_question_usage(self, usage: FormalQuestionUsageEntry) -> None:
+    ...
+
+  def list_formal_question_usage(self, session_id: str) -> List[FormalQuestionUsageEntry]:
     ...
 
 
@@ -124,4 +158,32 @@ class NullPersistenceRepository:
     provider: Optional[str] = None,
   ) -> List[QuestionBankEntry]:
     _ = (role, mode, provider)
+    return []
+
+  def seed_formal_questions(self, questions: List[FormalQuestionBankWrite]) -> None:
+    _ = questions
+
+  def replace_interviewer_question_bank(self, interviewer_id: str, questions: List[FormalQuestionBankWrite]) -> None:
+    _ = (interviewer_id, questions)
+
+  def replace_global_question_bank(self, role: InterviewRole, questions: List[FormalQuestionBankWrite]) -> None:
+    _ = (role, questions)
+
+  def list_formal_questions(
+    self,
+    *,
+    scope_type: Optional[str] = None,
+    interviewer_id: Optional[str] = None,
+    role: Optional[InterviewRole] = None,
+    stage_key: Optional[InterviewStageKey] = None,
+    enabled_only: bool = True,
+  ) -> List[FormalQuestionBankEntry]:
+    _ = (scope_type, interviewer_id, role, stage_key, enabled_only)
+    return []
+
+  def save_formal_question_usage(self, usage: FormalQuestionUsageEntry) -> None:
+    _ = usage
+
+  def list_formal_question_usage(self, session_id: str) -> List[FormalQuestionUsageEntry]:
+    _ = session_id
     return []

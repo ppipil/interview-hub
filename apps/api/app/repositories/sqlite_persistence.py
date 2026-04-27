@@ -9,8 +9,16 @@ import sqlite3
 from typing import Iterator, List, Optional
 
 from app.core.errors import ConfigError
-from app.models.api import ConversationMessage, InterviewFeedback, InterviewMode, InterviewRole, Interviewer, Session
-from app.models.persistence import InterviewerProfileEntry, InterviewerSecretEntry, QuestionBankEntry, SecondMeConnectionEntry
+from app.models.api import ConversationMessage, InterviewFeedback, InterviewMode, InterviewRole, InterviewStageKey, Interviewer, Session
+from app.models.persistence import (
+  FormalQuestionBankEntry,
+  FormalQuestionBankWrite,
+  FormalQuestionUsageEntry,
+  InterviewerProfileEntry,
+  InterviewerSecretEntry,
+  QuestionBankEntry,
+  SecondMeConnectionEntry,
+)
 
 
 class SqlitePersistenceRepository:
@@ -399,6 +407,106 @@ class SqlitePersistenceRepository:
       for row in rows
     ]
 
+  def seed_formal_questions(self, questions: List[FormalQuestionBankWrite]) -> None:
+    if not questions:
+      return
+    with self._connect() as connection:
+      self._insert_formal_questions(connection, questions, replace_existing=False)
+
+  def replace_interviewer_question_bank(self, interviewer_id: str, questions: List[FormalQuestionBankWrite]) -> None:
+    with self._connect() as connection:
+      connection.execute(
+        "DELETE FROM formal_question_bank WHERE scope_type = ? AND interviewer_id = ?",
+        ("interviewer", interviewer_id),
+      )
+      self._insert_formal_questions(connection, questions, replace_existing=False)
+
+  def replace_global_question_bank(self, role: InterviewRole, questions: List[FormalQuestionBankWrite]) -> None:
+    with self._connect() as connection:
+      connection.execute(
+        "DELETE FROM formal_question_bank WHERE scope_type = ? AND role = ?",
+        ("global", role),
+      )
+      self._insert_formal_questions(connection, questions, replace_existing=False)
+
+  def list_formal_questions(
+    self,
+    *,
+    scope_type: Optional[str] = None,
+    interviewer_id: Optional[str] = None,
+    role: Optional[InterviewRole] = None,
+    stage_key: Optional[InterviewStageKey] = None,
+    enabled_only: bool = True,
+  ) -> List[FormalQuestionBankEntry]:
+    query = [
+      """
+      SELECT
+        id, scope_type, interviewer_id, role, stage_key, question, reference_answer,
+        tags_json, enabled, sort_order, created_at, updated_at
+      FROM formal_question_bank
+      WHERE 1 = 1
+      """
+    ]
+    params: List[str] = []
+    if enabled_only:
+      query.append("AND enabled = 1")
+    if scope_type:
+      query.append("AND scope_type = ?")
+      params.append(scope_type)
+    if interviewer_id:
+      query.append("AND interviewer_id = ?")
+      params.append(interviewer_id)
+    if role:
+      query.append("AND role = ?")
+      params.append(role)
+    if stage_key:
+      query.append("AND stage_key = ?")
+      params.append(stage_key)
+    query.append("ORDER BY sort_order ASC, created_at ASC")
+
+    with self._connect() as connection:
+      rows = connection.execute("\n".join(query), params).fetchall()
+
+    return [self._row_to_formal_question(row) for row in rows]
+
+  def save_formal_question_usage(self, usage: FormalQuestionUsageEntry) -> None:
+    with self._connect() as connection:
+      connection.execute(
+        """
+        INSERT OR REPLACE INTO formal_question_usage (
+          message_id, session_id, question_id, interviewer_id, role, round_number,
+          stage_key, source_scope, used_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+          usage.message_id,
+          usage.session_id,
+          usage.question_id,
+          usage.interviewer_id,
+          usage.role,
+          usage.round_number,
+          usage.stage_key,
+          usage.source_scope,
+          usage.used_at,
+        ),
+      )
+
+  def list_formal_question_usage(self, session_id: str) -> List[FormalQuestionUsageEntry]:
+    with self._connect() as connection:
+      rows = connection.execute(
+        """
+        SELECT
+          message_id, session_id, question_id, interviewer_id, role, round_number,
+          stage_key, source_scope, used_at
+        FROM formal_question_usage
+        WHERE session_id = ?
+        ORDER BY round_number ASC, used_at ASC
+        """,
+        (session_id,),
+      ).fetchall()
+    return [self._row_to_formal_question_usage(row) for row in rows]
+
   @contextmanager
   def _connect(self) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(self._db_path)
@@ -518,6 +626,39 @@ class SqlitePersistenceRepository:
 
         CREATE INDEX IF NOT EXISTS idx_question_bank_lookup
           ON question_bank(role, mode, provider, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS formal_question_bank (
+          id TEXT PRIMARY KEY,
+          scope_type TEXT NOT NULL,
+          interviewer_id TEXT,
+          role TEXT NOT NULL,
+          stage_key TEXT NOT NULL,
+          question TEXT NOT NULL,
+          reference_answer TEXT,
+          tags_json TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 100,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_formal_question_lookup
+          ON formal_question_bank(scope_type, interviewer_id, role, stage_key, enabled, sort_order);
+
+        CREATE TABLE IF NOT EXISTS formal_question_usage (
+          message_id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          question_id TEXT NOT NULL,
+          interviewer_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          round_number INTEGER NOT NULL,
+          stage_key TEXT NOT NULL,
+          source_scope TEXT NOT NULL,
+          used_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_formal_question_usage_session
+          ON formal_question_usage(session_id, round_number);
         """
       )
       self._ensure_column(connection, "interviewers", "skill_prompt", "TEXT")
@@ -576,6 +717,112 @@ class SqlitePersistenceRepository:
       enabled=bool(row["enabled"]),
       created_at=row["created_at"],
       updated_at=row["updated_at"],
+    )
+
+  def _insert_formal_questions(
+    self,
+    connection: sqlite3.Connection,
+    questions: List[FormalQuestionBankWrite],
+    *,
+    replace_existing: bool,
+  ) -> None:
+    if not questions:
+      return
+    now = self._now()
+    sql = """
+      INSERT INTO formal_question_bank (
+        id, scope_type, interviewer_id, role, stage_key, question, reference_answer,
+        tags_json, enabled, sort_order, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    if replace_existing:
+      sql += """
+      ON CONFLICT(id) DO UPDATE SET
+        scope_type=excluded.scope_type,
+        interviewer_id=excluded.interviewer_id,
+        role=excluded.role,
+        stage_key=excluded.stage_key,
+        question=excluded.question,
+        reference_answer=excluded.reference_answer,
+        tags_json=excluded.tags_json,
+        enabled=excluded.enabled,
+        sort_order=excluded.sort_order,
+        updated_at=excluded.updated_at
+      """
+    else:
+      sql += """
+      ON CONFLICT(id) DO UPDATE SET
+        question=excluded.question,
+        reference_answer=excluded.reference_answer,
+        tags_json=excluded.tags_json,
+        enabled=excluded.enabled,
+        sort_order=excluded.sort_order,
+        updated_at=excluded.updated_at
+      """
+    connection.executemany(
+      sql,
+      [
+        (
+          self._formal_question_id(question),
+          question.scope_type,
+          question.interviewer_id,
+          question.role,
+          question.stage_key,
+          question.question.strip(),
+          question.reference_answer.strip() if question.reference_answer else None,
+          json.dumps(question.tags or [], ensure_ascii=False),
+          1 if question.enabled else 0,
+          question.sort_order,
+          now,
+          now,
+        )
+        for question in questions
+      ],
+    )
+
+  def _formal_question_id(self, question: FormalQuestionBankWrite) -> str:
+    fingerprint = hashlib.sha256(
+      "|".join(
+        [
+          question.scope_type,
+          question.interviewer_id or "",
+          question.role,
+          question.stage_key,
+          str(question.sort_order),
+          question.question.strip(),
+        ]
+      ).encode("utf-8"),
+    ).hexdigest()
+    return fingerprint
+
+  def _row_to_formal_question(self, row: sqlite3.Row) -> FormalQuestionBankEntry:
+    return FormalQuestionBankEntry(
+      id=row["id"],
+      scope_type=row["scope_type"],
+      interviewer_id=row["interviewer_id"],
+      role=row["role"],
+      stage_key=row["stage_key"],
+      question=row["question"],
+      reference_answer=row["reference_answer"],
+      tags=self._load_json_list(row["tags_json"]),
+      enabled=bool(row["enabled"]),
+      sort_order=int(row["sort_order"]),
+      created_at=row["created_at"],
+      updated_at=row["updated_at"],
+    )
+
+  def _row_to_formal_question_usage(self, row: sqlite3.Row) -> FormalQuestionUsageEntry:
+    return FormalQuestionUsageEntry(
+      message_id=row["message_id"],
+      session_id=row["session_id"],
+      question_id=row["question_id"],
+      interviewer_id=row["interviewer_id"],
+      role=row["role"],
+      round_number=int(row["round_number"]),
+      stage_key=row["stage_key"],
+      source_scope=row["source_scope"],
+      used_at=row["used_at"],
     )
 
   def _load_json_list(self, raw: Optional[str]) -> List[str]:

@@ -44,7 +44,7 @@ class FeedbackService:
       "现在这场模拟面试已经结束。"
       f"请你继续以{ROLE_LABELS[session.role]}面试官的身份，"
       "基于下面这份完整对话生成最终复盘。"
-      "你必须只返回一个尽量短的 JSON 对象，不要使用 Markdown，不要加代码块，不要写额外说明，不要换行。\n"
+      "你必须只返回一个紧凑但信息充分的 JSON 对象，不要使用 Markdown，不要加代码块，不要写额外说明，不要换行。\n"
       "JSON 字段必须严格使用以下 key："
       "summary、dimensions、strengths、improvements、suggestedAnswer、roundReviews。\n"
       "输出规则：\n"
@@ -53,11 +53,14 @@ class FeedbackService:
       "label 分别是 表达清晰度、专业深度、问题贴合度；score 为 1 到 5 的整数；comment 控制在18字以内。\n"
       "3. strengths：输出 2 条中文亮点，每条控制在18字以内。\n"
       "4. improvements：输出 3 条中文改进建议，每条控制在24字以内。\n"
-      "5. suggestedAnswer：输出一句更成熟的回答策略或参考表达，控制在40字以内。\n"
-      "6. roundReviews：按轮次输出数组，每项必须包含 round、note、evaluation、referenceAnswer；"
-      "note 用中文一句话概括观察，控制在20字以内；"
+      "5. suggestedAnswer：输出一句更成熟的回答策略或参考表达，控制在80字以内。\n"
+      "6. roundReviews：按轮次输出数组，每项必须包含 round、evaluation、referenceAnswer；"
+      "不要输出 note、comment、复盘观察等额外字段；"
       "evaluation 用中文评价这一轮回答的优点和缺口，控制在45字以内；"
-      "referenceAnswer 给出更成熟的参考答案或答题结构，控制在90字以内。\n"
+      "referenceAnswer 要比普通建议更详细，控制在180到260字；"
+      "必须结合本轮问题和候选人回答，给出可直接学习的示范答案；"
+      "结构建议包含：先正面回答结论，再讲关键动作/技术取舍/数据结果，最后补一条复盘或风险意识；"
+      "不要只写“可以按背景-行动-结果回答”这类空泛模板。\n"
       "7. 不要遗漏任何轮次，不要输出 null。\n"
       f"当前岗位：{ROLE_LABELS[session.role]}。\n"
       f"当前模式：{MODE_LABELS[session.mode]}。\n"
@@ -73,8 +76,10 @@ class FeedbackService:
   ) -> str:
     return (
       "你刚才返回的内容格式不符合要求。"
-      "现在请重新输出，并且只返回一个可解析、尽量短的 JSON 对象，不要加任何解释、不要加 Markdown、不要加代码块、不要换行。\n"
+      "现在请重新输出，并且只返回一个可解析、紧凑但信息充分的 JSON 对象，不要加任何解释、不要加 Markdown、不要加代码块、不要换行。\n"
       "字段仍然只能是：summary、dimensions、strengths、improvements、suggestedAnswer、roundReviews。\n"
+      "roundReviews 每项只输出 round、evaluation、referenceAnswer，不要输出 note 或复盘观察。\n"
+      "每个 roundReviews.referenceAnswer 需要保留详细示范答案，控制在180到260字，不能压缩成一句话。\n"
       "如果你上一次已经写好了内容，只需要把它整理成合法 JSON。\n"
       f"你上一次的回复是：\n{raw_reply}\n"
       f"原始面试对话如下：\n{self._build_transcript(messages)}\n"
@@ -284,7 +289,7 @@ class FeedbackService:
           round=entry["round"],
           question=entry["question"],
           answer=entry["answer"],
-          note=review.get("note") or "这一轮的复盘重点暂时没有成功解析出来。",
+          note=review.get("note") or "",
           evaluation=review.get("evaluation") or review.get("note") or "这一轮回答还需要补充更具体的评价。",
           referenceAnswer=review.get("referenceAnswer") or self._build_fallback_reference_answer(entry),
         ),
@@ -292,10 +297,19 @@ class FeedbackService:
     return normalized, len(reviews_by_round)
 
   def _build_fallback_reference_answer(self, round_entry: Dict[str, Any]) -> str:
+    question = self._as_text(round_entry.get("question")) or "这个问题"
     answer = self._as_text(round_entry.get("answer"))
     if answer:
-      return "可以按“背景-行动-结果-复盘”重组回答，并补充量化结果与关键取舍。"
-    return "建议先正面回应问题，再用一个具体经历补充做法、结果和反思。"
+      return (
+        f"可以先正面回应“{question}”，再把回答展开成一个完整案例：先说明业务背景和目标，"
+        f"再讲你当时的职责、关键动作和技术/方案取舍，例如为什么这样拆分、如何验证风险、如何协同推进。"
+        "最后补充结果数据、上线效果或复盘反思，让面试官看到你不仅做了事，也理解问题本质和改进空间。"
+      )
+    return (
+      f"建议先直接回答“{question}”的核心判断，再补一个真实或模拟案例：背景是什么、约束是什么、"
+      "你会采取哪些步骤、如何衡量结果、遇到风险怎么兜底。即使暂时没有亲身经历，也可以说明你的分析框架，"
+      "让答案从“不会/没做过”变成有逻辑的解决方案。"
+    )
 
   def _build_round_transcript(self, messages: List[ConversationMessage]) -> List[Dict[str, Any]]:
     questions_by_round: Dict[int, str] = {}

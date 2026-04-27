@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from app.core.config import Settings
-from app.core.errors import UpstreamServiceError, ValidationError
+from app.core.errors import ValidationError
 from app.models.api import (
   ConversationMessage,
   CreateSessionRequest,
@@ -14,18 +14,26 @@ from app.models.api import (
   SendMessageRequest,
   Session,
   UpsertAdminInterviewerRequest,
+  UpsertGlobalQuestionBankRequest,
 )
-from app.models.persistence import InterviewerProfileEntry
+from app.models.persistence import (
+  FormalQuestionBankEntry,
+  FormalQuestionBankWrite,
+  FormalQuestionUsageEntry,
+  InterviewerProfileEntry,
+)
 from app.models.runtime import DoubaoRuntime, SecondMeVisitorChatRuntime
 from app.repositories.in_memory import InMemorySessionRepository
 from app.repositories.persistence import NullPersistenceRepository
 from app.repositories.sqlite_persistence import SqlitePersistenceRepository
 from app.services.admin_interviewers import AdminInterviewerService
 from app.services.catalog import InterviewerCatalog
+from app.services.feedback import FeedbackService
 from app.services.interview import InterviewService
 from app.services.interview_prompts import (
   build_avatar_bootstrap_prompt,
   build_avatar_follow_up_prompt,
+  build_system_follow_up_prompt,
   sanitize_interviewer_question,
 )
 from app.services.interview_provider import InterviewProviderRegistry, ProviderBootstrapResult
@@ -37,6 +45,7 @@ class FakeProvider:
     self.bootstrap_calls = 0
     self.follow_up_calls = 0
     self.feedback_calls = 0
+    self.last_follow_up_messages = []
 
   async def bootstrap(self, interviewer, role, mode, total_rounds):
     _ = (interviewer, role, mode, total_rounds)
@@ -58,9 +67,10 @@ class FakeProvider:
       channel=None,
     )
 
-  async def follow_up(self, interviewer, session, runtime, channel, answer):
+  async def follow_up(self, interviewer, session, runtime, channel, answer, messages):
     _ = (interviewer, session, runtime, channel, answer)
     self.follow_up_calls += 1
+    self.last_follow_up_messages = messages
     return f"{self.provider_name}-follow-up-{self.follow_up_calls}"
 
   async def generate_feedback(self, session, messages, runtime, channel):
@@ -91,47 +101,85 @@ class FakeProvider:
     )
 
 
-class EmptyBootstrapProvider(FakeProvider):
-  async def bootstrap(self, interviewer, role, mode, total_rounds):
-    result = await super().bootstrap(interviewer, role, mode, total_rounds)
-    return ProviderBootstrapResult(
-      first_question_text=" ",
-      runtime=result.runtime,
-      channel=result.channel,
-    )
-
-  async def close(self, runtime, channel):
-    _ = (runtime, channel)
-
-
-class PromptEchoProvider(FakeProvider):
-  async def bootstrap(self, interviewer, role, mode, total_rounds):
-    result = await super().bootstrap(interviewer, role, mode, total_rounds)
-    return ProviderBootstrapResult(
-      first_question_text=build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds),
-      runtime=result.runtime,
-      channel=result.channel,
-    )
-
-  async def follow_up(self, interviewer, session, runtime, channel, answer):
-    _ = (runtime, channel)
-    return build_avatar_follow_up_prompt(
-      interviewer=interviewer,
-      role=session.role,
-      mode=session.mode,
-      next_round=session.currentRound + 1,
-      total_rounds=session.totalRounds,
-      answer=answer,
-    )
-
-
 class FakePersistenceRepository(NullPersistenceRepository):
-  def __init__(self, profiles=None) -> None:
+  def __init__(self, profiles=None, formal_questions=None) -> None:
     self._profiles = profiles or []
+    self._formal_questions = list(formal_questions or [])
+    self._usage = []
 
   def list_interviewer_profiles(self, enabled_only=True):
     _ = enabled_only
     return self._profiles
+
+  def seed_formal_questions(self, questions):
+    existing = {self._formal_question_key(item) for item in self._formal_questions}
+    for question in questions:
+      if self._formal_question_key(question) in existing:
+        continue
+      self._formal_questions.append(question)
+      existing.add(self._formal_question_key(question))
+
+  def list_formal_questions(self, *, scope_type=None, interviewer_id=None, role=None, stage_key=None, enabled_only=True):
+    rows = self._formal_questions
+    if scope_type:
+      rows = [item for item in rows if item.scope_type == scope_type]
+    if interviewer_id:
+      rows = [item for item in rows if item.interviewer_id == interviewer_id]
+    if role:
+      rows = [item for item in rows if item.role == role]
+    if stage_key:
+      rows = [item for item in rows if item.stage_key == stage_key]
+    if enabled_only:
+      rows = [item for item in rows if item.enabled]
+    return [
+      FormalQuestionBankEntry(
+        id=self._formal_question_key(item),
+        scope_type=item.scope_type,
+        interviewer_id=item.interviewer_id,
+        role=item.role,
+        stage_key=item.stage_key,
+        question=item.question,
+        reference_answer=item.reference_answer,
+        tags=item.tags,
+        enabled=item.enabled,
+        sort_order=item.sort_order,
+        created_at="2026-04-20T00:00:00+00:00",
+        updated_at="2026-04-20T00:00:00+00:00",
+      )
+      for item in sorted(rows, key=lambda current: current.sort_order)
+    ]
+
+  def save_formal_question_usage(self, usage):
+    self._usage.append(usage)
+
+  def list_formal_question_usage(self, session_id):
+    return [item for item in self._usage if item.session_id == session_id]
+
+  def replace_interviewer_question_bank(self, interviewer_id, questions):
+    self._formal_questions = [
+      item
+      for item in self._formal_questions
+      if not (item.scope_type == "interviewer" and item.interviewer_id == interviewer_id)
+    ]
+    self._formal_questions.extend(questions)
+
+  def replace_global_question_bank(self, role, questions):
+    self._formal_questions = [
+      item for item in self._formal_questions if not (item.scope_type == "global" and item.role == role)
+    ]
+    self._formal_questions.extend(questions)
+
+  def _formal_question_key(self, question):
+    return "|".join(
+      [
+        question.scope_type,
+        question.interviewer_id or "",
+        question.role,
+        question.stage_key,
+        str(question.sort_order),
+        question.question,
+      ]
+    )
 
 
 def build_settings() -> Settings:
@@ -185,13 +233,15 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     self.catalog = InterviewerCatalog(settings)
     self.system_provider = FakeProvider("doubao")
     self.avatar_provider = FakeProvider("secondme_visitor")
+    self.persistence = FakePersistenceRepository()
     self.service = InterviewService(
       settings=settings,
       repository=InMemorySessionRepository(),
-      persistence=NullPersistenceRepository(),
+      persistence=self.persistence,
       catalog=self.catalog,
       providers=InterviewProviderRegistry([self.system_provider, self.avatar_provider]),
     )
+    self.service.sync_catalog()
 
   async def test_system_interviewer_flow_routes_to_doubao_provider(self) -> None:
     create_response = await self.service.create_session(
@@ -203,13 +253,19 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
       )
     )
     self.assertEqual(create_response.interviewer.provider, "doubao")
-    self.assertEqual(create_response.firstQuestion.content, "doubao-question-1")
+    self.assertEqual(
+      create_response.firstQuestion.content,
+      "请先做一个简短的自我介绍，并讲一个最近最能体现你前端能力的页面或应用。",
+    )
 
     follow_up_response = await self.service.send_message(
       create_response.session.id,
       payload=SendMessageRequest(content="我的第一轮回答"),
     )
-    self.assertEqual(follow_up_response.assistantMessage.content, "doubao-follow-up-1")
+    self.assertEqual(
+      follow_up_response.assistantMessage.content,
+      "请解释一个你最熟悉的前端基础知识点，并说明它的核心原理、适用场景和常见问题。",
+    )
 
     complete_response = await self.service.send_message(
       create_response.session.id,
@@ -220,7 +276,7 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     feedback = await self.service.get_feedback(create_response.session.id)
     self.assertEqual(feedback.summary, "doubao-summary")
     self.assertEqual(self.system_provider.bootstrap_calls, 1)
-    self.assertEqual(self.system_provider.follow_up_calls, 1)
+    self.assertEqual(self.system_provider.follow_up_calls, 0)
     self.assertEqual(self.system_provider.feedback_calls, 1)
     self.assertEqual(self.avatar_provider.bootstrap_calls, 0)
 
@@ -234,7 +290,10 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
       )
     )
     self.assertEqual(create_response.interviewer.provider, "secondme_visitor")
-    self.assertEqual(create_response.firstQuestion.content, "secondme_visitor-question-1")
+    self.assertEqual(
+      create_response.firstQuestion.content,
+      "请先做一个简短的自我介绍，并讲一个最近最能体现你后端能力的服务或系统。",
+    )
 
     complete_response = await self.service.send_message(
       create_response.session.id,
@@ -247,61 +306,6 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.avatar_provider.bootstrap_calls, 1)
     self.assertEqual(self.avatar_provider.feedback_calls, 1)
 
-  async def test_empty_first_question_is_rejected(self) -> None:
-    service = InterviewService(
-      settings=build_settings(),
-      repository=InMemorySessionRepository(),
-      persistence=NullPersistenceRepository(),
-      catalog=self.catalog,
-      providers=InterviewProviderRegistry([EmptyBootstrapProvider("doubao"), self.avatar_provider]),
-    )
-
-    with self.assertRaises(UpstreamServiceError) as ctx:
-      await service.create_session(
-        payload=CreateSessionRequest(
-          role="frontend",
-          mode="guided",
-          interviewerId="system_tech",
-          totalRounds=2,
-        )
-      )
-
-    self.assertEqual(ctx.exception.code, "INTERVIEWER_EMPTY_FIRST_QUESTION")
-
-  async def test_internal_prompt_echo_is_sanitized_before_returning(self) -> None:
-    service = InterviewService(
-      settings=build_settings(),
-      repository=InMemorySessionRepository(),
-      persistence=NullPersistenceRepository(),
-      catalog=self.catalog,
-      providers=InterviewProviderRegistry([PromptEchoProvider("doubao"), self.avatar_provider]),
-    )
-
-    create_response = await service.create_session(
-      payload=CreateSessionRequest(
-        role="frontend",
-        mode="guided",
-        interviewerId="system_tech",
-        totalRounds=3,
-      )
-    )
-    self.assertEqual(
-      create_response.firstQuestion.content,
-      "请简要介绍一下你的背景，以及最近一个与前端工程师岗位相关的项目经历。",
-    )
-    self.assertNotIn("【当前阶段任务卡】", create_response.firstQuestion.content)
-
-    follow_up_response = await service.send_message(
-      create_response.session.id,
-      payload=SendMessageRequest(content="我做过一个中后台项目。"),
-    )
-
-    self.assertEqual(
-      follow_up_response.assistantMessage.content,
-      "请结合你的前端工程师经历，说明一个关键项目难点、你的解决思路和最终结果。",
-    )
-    self.assertNotIn("候选人刚才", follow_up_response.assistantMessage.content)
-
   async def test_round_validation_rejects_out_of_range_values(self) -> None:
     with self.assertRaises(ValidationError):
       await self.service.create_session(
@@ -312,6 +316,78 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
           totalRounds=11,
         )
       )
+
+  async def test_incomplete_interviewer_bank_falls_back_to_global_questions(self) -> None:
+    create_response = await self.service.create_session(
+      payload=CreateSessionRequest(
+        role="backend",
+        mode="real",
+        interviewerId="secondme_tech",
+        totalRounds=6,
+      )
+    )
+    self.assertEqual(
+      create_response.firstQuestion.content,
+      "请先做一个简短的自我介绍，并讲一个最近最能体现你后端能力的服务或系统。",
+    )
+
+    follow_up_response = await self.service.send_message(
+      create_response.session.id,
+      payload=SendMessageRequest(content="我最近做过订单系统。"),
+    )
+    self.assertEqual(
+      follow_up_response.assistantMessage.content,
+      "如果让你用 HashMap 证明自己的 Java 基础，你会怎么讲它的底层实现、扩容机制，以及 1.8 为什么引入红黑树？",
+    )
+
+    third_round_response = await self.service.send_message(
+      create_response.session.id,
+      payload=SendMessageRequest(content="我也做过缓存优化。"),
+    )
+    self.assertEqual(
+      third_round_response.assistantMessage.content,
+      "如果从数据库原理里挑一道高频题，你会怎么回答为什么 MySQL 索引使用 B+ 树，而不是 B 树或红黑树？",
+    )
+
+    fourth_round_response = await self.service.send_message(
+      create_response.session.id,
+      payload=SendMessageRequest(content="我排查过慢查询。"),
+    )
+    self.assertEqual(
+      fourth_round_response.assistantMessage.content,
+      "你会怎么系统解释缓存穿透、缓存击穿、缓存雪崩，以及各自的解决方案？",
+    )
+
+    fallback_response = await self.service.send_message(
+      create_response.session.id,
+      payload=SendMessageRequest(content="我也了解网络协议。"),
+    )
+    self.assertEqual(
+      fallback_response.assistantMessage.content,
+      "HashMap 的底层实现、扩容机制，以及为什么 1.8 之后引入红黑树？",
+    )
+
+  async def test_same_session_does_not_repeat_formal_questions(self) -> None:
+    create_response = await self.service.create_session(
+      payload=CreateSessionRequest(
+        role="backend",
+        mode="guided",
+        interviewerId="system_tech",
+        totalRounds=8,
+      )
+    )
+
+    assistant_questions = [create_response.firstQuestion.content]
+    session_id = create_response.session.id
+    for round_number in range(2, 9):
+      response = await self.service.send_message(
+        session_id,
+        payload=SendMessageRequest(content=f"第 {round_number - 1} 轮回答"),
+      )
+      if response.assistantMessage:
+        assistant_questions.append(response.assistantMessage.content)
+
+    self.assertEqual(len(assistant_questions), len(set(assistant_questions)))
 
   async def test_database_profile_skill_is_exposed_on_interviewer(self) -> None:
     settings = build_settings()
@@ -394,6 +470,41 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
     self.assertIn("第2阶段：算法与数据结构", follow_up_prompt)
     self.assertIn("不能跳到其他阶段", follow_up_prompt)
 
+  def test_system_follow_up_prompt_includes_history_and_dedup_rules(self) -> None:
+    settings = build_settings()
+    interviewer = InterviewerCatalog(settings).get("system_tech", "backend", "real")
+    messages = [
+      ConversationMessage(
+        id="m1",
+        role="assistant",
+        content="请介绍一下你最近做过的高并发项目。",
+        round=1,
+        createdAt="2026-04-21T00:00:00+00:00",
+      ),
+      ConversationMessage(
+        id="m2",
+        role="user",
+        content="我做过订单系统。",
+        round=1,
+        createdAt="2026-04-21T00:01:00+00:00",
+      ),
+    ]
+
+    prompt = build_system_follow_up_prompt(
+      interviewer=interviewer,
+      role="backend",
+      mode="real",
+      next_round=2,
+      total_rounds=10,
+      answer="我做过订单系统。",
+      messages=messages,
+    )
+
+    self.assertIn("已问过的问题（严禁重复或换壳重复）", prompt)
+    self.assertIn("请介绍一下你最近做过的高并发项目。", prompt)
+    self.assertIn("不得把旧问题换一种说法重复再问", prompt)
+    self.assertIn("最近对话", prompt)
+
   def test_prompt_echo_sanitizer_extracts_stage_question(self) -> None:
     leaked_prompt = (
       "【Interview Hub 面试官 Skill】\n"
@@ -413,6 +524,103 @@ class InterviewServiceTests(unittest.IsolatedAsyncioTestCase):
       sanitize_interviewer_question(leaked_prompt, fallback="请介绍一下你自己。"),
       "请简要介绍一下你的背景和之前的工作经历。",
     )
+
+  def test_feedback_prompt_requests_detailed_reference_answers(self) -> None:
+    session = Session(
+      id="session_feedback",
+      role="backend",
+      mode="real",
+      interviewerId="system_tech",
+      status="completed",
+      currentRound=1,
+      totalRounds=1,
+      startedAt="2026-04-21T00:00:00+00:00",
+      finishedAt="2026-04-21T00:10:00+00:00",
+    )
+    messages = [
+      ConversationMessage(
+        id="q1",
+        role="assistant",
+        content="请介绍一个你做过的高并发项目。",
+        round=1,
+        createdAt="2026-04-21T00:00:00+00:00",
+      ),
+      ConversationMessage(
+        id="a1",
+        role="user",
+        content="我做过订单系统。",
+        round=1,
+        createdAt="2026-04-21T00:01:00+00:00",
+      ),
+    ]
+
+    prompt = FeedbackService().build_feedback_prompt(session, messages)
+
+    self.assertIn("referenceAnswer 要比普通建议更详细，控制在180到260字", prompt)
+    self.assertIn("给出可直接学习的示范答案", prompt)
+    self.assertIn("不要只写“可以按背景-行动-结果回答”这类空泛模板", prompt)
+    self.assertIn("每项必须包含 round、evaluation、referenceAnswer", prompt)
+    self.assertIn("不要输出 note、comment、复盘观察等额外字段", prompt)
+    self.assertNotIn("note 用中文一句话概括观察", prompt)
+
+  def test_feedback_parser_accepts_round_reviews_without_note(self) -> None:
+    session = Session(
+      id="session_feedback",
+      role="backend",
+      mode="real",
+      interviewerId="system_tech",
+      status="completed",
+      currentRound=1,
+      totalRounds=1,
+      startedAt="2026-04-21T00:00:00+00:00",
+      finishedAt="2026-04-21T00:10:00+00:00",
+    )
+    messages = [
+      ConversationMessage(
+        id="q1",
+        role="assistant",
+        content="请介绍一个你做过的高并发项目。",
+        round=1,
+        createdAt="2026-04-21T00:00:00+00:00",
+      ),
+      ConversationMessage(
+        id="a1",
+        role="user",
+        content="我做过订单系统。",
+        round=1,
+        createdAt="2026-04-21T00:01:00+00:00",
+      ),
+    ]
+    raw_feedback = (
+      '{"summary":"整体表达可继续补细节",'
+      '"dimensions":['
+      '{"key":"clarity","label":"表达清晰度","score":4,"comment":"结构较清楚"},'
+      '{"key":"depth","label":"专业深度","score":3,"comment":"细节偏少"},'
+      '{"key":"relevance","label":"问题贴合度","score":4,"comment":"基本贴题"}],'
+      '"strengths":["方向明确","表达稳定"],'
+      '"improvements":["补充数据","讲清取舍","加强复盘"],'
+      '"suggestedAnswer":"先讲背景目标，再讲关键动作、技术取舍和结果。",'
+      '"roundReviews":[{"round":1,"evaluation":"回答方向对，但技术细节和结果量化不足。",'
+      '"referenceAnswer":"可以先说明订单系统的业务背景和并发目标，再讲你负责的模块、核心瓶颈、缓存或异步化取舍，以及最终延迟、吞吐或稳定性结果，最后补充一次复盘。"}]}'
+    )
+
+    feedback = FeedbackService().parse_feedback(session, messages, raw_feedback)
+
+    self.assertEqual(feedback.roundReviews[0].note, "")
+    self.assertIn("技术细节", feedback.roundReviews[0].evaluation)
+    self.assertIn("业务背景", feedback.roundReviews[0].referenceAnswer)
+
+  def test_fallback_reference_answer_is_detailed(self) -> None:
+    reference_answer = FeedbackService()._build_fallback_reference_answer(
+      {
+        "question": "请介绍一个你做过的高并发项目。",
+        "answer": "我做过订单系统。",
+      }
+    )
+
+    self.assertGreaterEqual(len(reference_answer), 100)
+    self.assertIn("业务背景和目标", reference_answer)
+    self.assertIn("技术/方案取舍", reference_answer)
 
 
 class SqlitePersistenceRepositoryTests(unittest.TestCase):
@@ -495,9 +703,40 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
         source_session_id=session.id,
         created_at=message.createdAt,
       )
+      repo.seed_formal_questions(
+        [
+          FormalQuestionBankWrite(
+            scope_type="global",
+            interviewer_id=None,
+            role="frontend",
+            stage_key="intro",
+            question="请先介绍一下你最近做过的前端项目。",
+            reference_answer="优秀回答会先说明背景、职责和结果。",
+            tags=["通用题库", "前端"],
+            enabled=True,
+            sort_order=10,
+          )
+        ]
+      )
+      formal_questions = repo.list_formal_questions(scope_type="global", role="frontend")
+      repo.save_formal_question_usage(
+        FormalQuestionUsageEntry(
+          message_id=message.id,
+          session_id=session.id,
+          question_id=formal_questions[0].id,
+          interviewer_id=session.interviewerId,
+          role=session.role,
+          round_number=1,
+          stage_key="intro",
+          source_scope="global",
+          used_at=message.createdAt,
+        )
+      )
 
       stored_feedback = repo.get_feedback(session.id)
       stored_questions = repo.list_questions(role="frontend", provider="doubao")
+      stored_formal_questions = repo.list_formal_questions(scope_type="global", role="frontend")
+      stored_usage = repo.list_formal_question_usage(session.id)
       stored_secret = repo.get_interviewer_secret("secondme_tech")
       stored_profiles = repo.list_interviewer_profiles()
 
@@ -510,6 +749,10 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
       self.assertEqual(len(stored_profiles), 1)
       self.assertEqual(stored_profiles[0].skill_prompt, "请重点考察候选人的项目拆解能力。")
       self.assertEqual(stored_profiles[0].interview_flow, "第1阶段：项目背景\n第2阶段：项目拆解")
+      self.assertEqual(len(stored_formal_questions), 1)
+      self.assertEqual(stored_formal_questions[0].stage_key, "intro")
+      self.assertEqual(len(stored_usage), 1)
+      self.assertEqual(stored_usage[0].source_scope, "global")
 
   def test_admin_interviewer_service_crud_profiles(self) -> None:
     with tempfile.TemporaryDirectory() as tempdir:
@@ -536,6 +779,26 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
           interviewFlow="第1阶段：产品背景\n第2阶段：指标拆解",
           avatarApiKey="sk-custom-avatar-key",
           enabled=True,
+          ownedQuestions=[
+            {
+              "role": "product_manager",
+              "stageKey": "intro",
+              "question": "请先介绍一个你主导过的产品项目。",
+              "referenceAnswer": "优秀回答应包含背景、职责和结果。",
+              "tags": ["项目背景"],
+              "enabled": True,
+              "sortOrder": 10,
+            },
+            {
+              "role": "product_manager",
+              "stageKey": "project",
+              "question": "讲一个你做过的关键产品取舍。",
+              "referenceAnswer": "优秀回答应讲清目标、数据依据和结果。",
+              "tags": ["项目深挖"],
+              "enabled": True,
+              "sortOrder": 20,
+            },
+          ],
         )
       )
 
@@ -545,6 +808,7 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
       self.assertEqual(created.avatarApiKeyMasked, "sk-cu...-key")
       self.assertEqual(created.skillPrompt, "重点追问候选人的产品决策依据和指标定义。")
       self.assertEqual(created.interviewFlow, "第1阶段：产品背景\n第2阶段：指标拆解")
+      self.assertEqual(len(created.ownedQuestions), 2)
 
       listed = service.list_interviewers()
       custom = next(item for item in listed if item.id == "avatar_product_mentor")
@@ -567,6 +831,26 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
           skillPrompt="更新后的 skill：继续追问取舍和量化结果。",
           interviewFlow="第1阶段：产品背景\n第2阶段：方案取舍",
           enabled=True,
+          ownedQuestions=[
+            {
+              "role": "product_manager",
+              "stageKey": "intro",
+              "question": "请先介绍一个你主导过的产品项目。",
+              "referenceAnswer": "优秀回答应包含背景、职责和结果。",
+              "tags": ["项目背景"],
+              "enabled": True,
+              "sortOrder": 10,
+            },
+            {
+              "role": "product_manager",
+              "stageKey": "project",
+              "question": "讲一个你做过的关键产品取舍。",
+              "referenceAnswer": "优秀回答应讲清目标、数据依据和结果。",
+              "tags": ["项目深挖"],
+              "enabled": True,
+              "sortOrder": 20,
+            },
+          ],
         )
       )
 
@@ -574,8 +858,46 @@ class SqlitePersistenceRepositoryTests(unittest.TestCase):
       self.assertEqual(updated.avatarApiKey, "sk-custom-avatar-key")
       self.assertEqual(updated.skillPrompt, "更新后的 skill：继续追问取舍和量化结果。")
       self.assertEqual(updated.interviewFlow, "第1阶段：产品背景\n第2阶段：方案取舍")
+      self.assertEqual(len(updated.ownedQuestions), 2)
       service.delete_interviewer("avatar_product_mentor")
       self.assertFalse(repo.list_interviewer_profiles(enabled_only=False))
+
+  def test_admin_interviewer_service_updates_global_question_bank(self) -> None:
+    with tempfile.TemporaryDirectory() as tempdir:
+      settings = replace(build_settings(), database_url=f"sqlite:///{tempdir}/interview-hub.sqlite3")
+      repo = SqlitePersistenceRepository(settings.database_url)
+      catalog = InterviewerCatalog(settings)
+      service = AdminInterviewerService(settings=settings, catalog=catalog, persistence=repo)
+
+      response = service.update_global_question_bank(
+        UpsertGlobalQuestionBankRequest(
+          role="backend",
+          questions=[
+            {
+              "role": "backend",
+              "stageKey": "intro",
+              "question": "请先介绍一个你最熟悉的后端项目。",
+              "referenceAnswer": "优秀回答应包含背景、职责和结果。",
+              "tags": ["通用题库"],
+              "enabled": True,
+              "sortOrder": 10,
+            },
+            {
+              "role": "backend",
+              "stageKey": "project",
+              "question": "讲一个你做过的高并发问题。",
+              "referenceAnswer": "优秀回答应讲清瓶颈、方案和结果。",
+              "tags": ["项目深挖"],
+              "enabled": True,
+              "sortOrder": 20,
+            },
+          ],
+        )
+      )
+
+      self.assertEqual(response.role, "backend")
+      self.assertEqual(len(response.questions), 2)
+      self.assertEqual(response.questions[0].stageKey, "intro")
 
   def _build_interviewers(self):
     return [

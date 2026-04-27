@@ -7,17 +7,21 @@ from typing import List, Optional
 from app.core.config import Settings
 from app.core.errors import ConfigError, NotFoundError, ValidationError
 from app.models.api import (
+  AdminQuestionBankQuestion,
   AdminInterviewer,
+  GlobalQuestionBankResponse,
   InterviewMode,
   InterviewRole,
   Interviewer,
   InterviewerProvider,
   InterviewerType,
   UpsertAdminInterviewerRequest,
+  UpsertGlobalQuestionBankRequest,
 )
-from app.models.persistence import InterviewerProfileEntry
+from app.models.persistence import FormalQuestionBankEntry, FormalQuestionBankWrite, InterviewerProfileEntry
 from app.repositories.persistence import PersistenceRepository
 from app.services.catalog import InterviewerCatalog, SUPPORTED_MODES, SUPPORTED_ROLES
+from app.services.formal_question_bank import build_seed_formal_questions, normalize_question_tags, validate_stage_key
 
 INTERVIEWER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -34,10 +38,12 @@ class AdminInterviewerService:
     self._persistence = persistence
 
   def list_interviewers(self) -> List[AdminInterviewer]:
+    self._ensure_default_question_banks()
     profiles = self._persistence.list_interviewer_profiles(enabled_only=False)
     base_interviewers = self._catalog.list()
     base_by_id = {item.id: item for item in base_interviewers}
     profile_by_id = {item.interviewer_id: item for item in profiles}
+    interviewer_questions = self._group_formal_questions_by_interviewer()
     ordered_ids = [item.id for item in base_interviewers]
     ordered_ids.extend(item.interviewer_id for item in profiles if item.interviewer_id not in base_by_id)
 
@@ -46,12 +52,14 @@ class AdminInterviewerService:
         interviewer_id=interviewer_id,
         base=base_by_id.get(interviewer_id),
         profile=profile_by_id.get(interviewer_id),
+        owned_questions=interviewer_questions.get(interviewer_id, []),
       )
       for interviewer_id in ordered_ids
     ]
 
   def upsert_interviewer(self, payload: UpsertAdminInterviewerRequest) -> AdminInterviewer:
     self._ensure_database_enabled()
+    self._ensure_default_question_banks()
     self._validate_payload(payload)
 
     existing_profile = self._find_profile(payload.id)
@@ -80,12 +88,55 @@ class AdminInterviewerService:
       updated_at=now,
     )
     self._persistence.upsert_interviewer_profile(profile)
+    if payload.ownedQuestions is not None:
+      self._persistence.replace_interviewer_question_bank(
+        profile.interviewer_id,
+        self._normalize_question_bank(
+          payload.ownedQuestions,
+          scope_type="interviewer",
+          interviewer_id=profile.interviewer_id,
+          supported_roles=payload.supportedRoles,
+        ),
+      )
 
     return self._build_admin_interviewer(
       interviewer_id=profile.interviewer_id,
       base=base,
       profile=profile,
+      owned_questions=self._persistence.list_formal_questions(
+        scope_type="interviewer",
+        interviewer_id=profile.interviewer_id,
+        enabled_only=False,
+      ),
     )
+
+  def get_global_question_bank(self, role: InterviewRole) -> GlobalQuestionBankResponse:
+    self._ensure_database_enabled()
+    self._ensure_default_question_banks()
+    return GlobalQuestionBankResponse(
+      role=role,
+      questions=[
+        self._to_admin_question(item)
+        for item in self._persistence.list_formal_questions(
+          scope_type="global",
+          role=role,
+          enabled_only=False,
+        )
+      ],
+    )
+
+  def update_global_question_bank(self, payload: UpsertGlobalQuestionBankRequest) -> GlobalQuestionBankResponse:
+    self._ensure_database_enabled()
+    self._ensure_default_question_banks()
+    normalized_questions = self._normalize_question_bank(
+      payload.questions,
+      scope_type="global",
+      interviewer_id=None,
+      supported_roles=[payload.role],
+      forced_role=payload.role,
+    )
+    self._persistence.replace_global_question_bank(payload.role, normalized_questions)
+    return self.get_global_question_bank(payload.role)
 
   def delete_interviewer(self, interviewer_id: str) -> None:
     self._ensure_database_enabled()
@@ -99,6 +150,7 @@ class AdminInterviewerService:
     interviewer_id: str,
     base: Optional[Interviewer],
     profile: Optional[InterviewerProfileEntry],
+    owned_questions: Optional[List[FormalQuestionBankEntry]] = None,
   ) -> AdminInterviewer:
     interviewer_type = self._first_present(profile.type if profile else None, base.type if base else None, "avatar")
     provider = self._first_present(
@@ -150,6 +202,7 @@ class AdminInterviewerService:
       avatarApiKey=avatar_api_key,
       avatarApiKeyMasked=self._mask_secret(avatar_api_key),
       updatedAt=profile.updated_at if profile else None,
+      ownedQuestions=[self._to_admin_question(item) for item in (owned_questions or [])],
     )
 
   def _find_profile(self, interviewer_id: str) -> Optional[InterviewerProfileEntry]:
@@ -173,6 +226,67 @@ class AdminInterviewerService:
       raise ValidationError("系统面试官当前仅支持 doubao provider。", field="provider")
     if payload.type == "avatar" and provider == "doubao":
       raise ValidationError("AI 分身面试官不能使用 doubao provider。", field="provider")
+
+  def _group_formal_questions_by_interviewer(self) -> dict[str, List[FormalQuestionBankEntry]]:
+    grouped: dict[str, List[FormalQuestionBankEntry]] = {}
+    for question in self._persistence.list_formal_questions(scope_type="interviewer", enabled_only=False):
+      if not question.interviewer_id:
+        continue
+      grouped.setdefault(question.interviewer_id, []).append(question)
+    return grouped
+
+  def _to_admin_question(self, question: FormalQuestionBankEntry) -> AdminQuestionBankQuestion:
+    return AdminQuestionBankQuestion(
+      id=question.id,
+      scopeType=question.scope_type,
+      interviewerId=question.interviewer_id,
+      role=question.role,
+      stageKey=question.stage_key,
+      question=question.question,
+      referenceAnswer=question.reference_answer,
+      tags=question.tags,
+      enabled=question.enabled,
+      sortOrder=question.sort_order,
+    )
+
+  def _normalize_question_bank(
+    self,
+    questions,
+    *,
+    scope_type: str,
+    interviewer_id: Optional[str],
+    supported_roles: List[InterviewRole],
+    forced_role: Optional[InterviewRole] = None,
+  ) -> List[FormalQuestionBankWrite]:
+    normalized: List[FormalQuestionBankWrite] = []
+    for index, item in enumerate(questions):
+      role = forced_role or item.role
+      if role not in supported_roles:
+        raise ValidationError("题库岗位必须属于当前面试官支持岗位。", field=f"ownedQuestions[{index}].role")
+      question_text = item.question.strip()
+      if not question_text:
+        raise ValidationError("题目内容不能为空。", field=f"ownedQuestions[{index}].question")
+      normalized.append(
+        FormalQuestionBankWrite(
+          scope_type=scope_type,  # type: ignore[arg-type]
+          interviewer_id=interviewer_id,
+          role=role,
+          stage_key=validate_stage_key(item.stageKey),
+          question=question_text,
+          reference_answer=self._normalize_optional(item.referenceAnswer),
+          tags=normalize_question_tags(item.tags),
+          enabled=item.enabled,
+          sort_order=item.sortOrder if item.sortOrder is not None else (index + 1) * 10,
+        )
+      )
+    return normalized
+
+  def _ensure_default_question_banks(self) -> None:
+    if not self._settings.database_enabled:
+      return
+    if self._persistence.list_formal_questions(enabled_only=False):
+      return
+    self._persistence.seed_formal_questions(build_seed_formal_questions(self._settings.avatar_interviewer_id))
 
   def _ensure_database_enabled(self) -> None:
     if not self._settings.database_enabled:

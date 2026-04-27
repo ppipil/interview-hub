@@ -21,8 +21,14 @@ apps/api
 - 已补多 provider 骨架：支持 `system -> doubao` 与 `avatar -> secondme_*` 的路由结构
 - 已补 `1-10` 轮校验与设置页轮次透传约束
 - 已补 SQLite / Postgres 持久化骨架，可落 interviewer / interviewer_profiles / sessions / messages / feedback / question_bank
+- 已新增正式题库表与使用记录：`formal_question_bank` / `formal_question_usage`
+- 面试主链路已切到“数据库唯一出题源”：首题和后续题都从数据库选择，不再依赖豆包或 SecondMe 实时生成问题
 - 已支持通过数据库 `interviewer_profiles` 维护第三方应用内的面试官 skill 与目标分身 `sk-...`
-- 已补隐藏管理台 `/admin/interviewers`，可通过页面维护面试官资料、类型、skill 文本和访问 key
+- 已补隐藏管理台 `/admin/interviewers`，可通过页面维护面试官资料、类型、skill 文本、访问 key 和专属题库
+- 已补通用兜底题库管理入口：当面试官专属题库不足时，运行时会自动从全局题库补题
+- 已补隐藏问卷 `/interviewer-questionnaire`：支持面试官姓名、稳定用户名、专属题库文本录入，并按用户名生成稳定 `interviewer_id`
+- 已修复 SecondMe 实时通道 prompt 回显问题，避免内部 prompt 被误展示为面试题
+- 已补真实页面路由：`/`、`/setup`、`/interview`、`/feedback`
 - 通过内存仓储保存 session / messages / feedback
 - 暴露前端已使用的 4 个核心接口
 - SecondMe 调用逻辑拆分为 client / realtime / orchestration / feedback service
@@ -32,12 +38,13 @@ apps/api
 - 当前代码仍保留旧的 SecondMe 接口链路作为 fallback
 - 当前已补 `Visitor Chat` 与豆包的代码骨架，但尚未用真实凭证完成外部联调
 - 当前数据库为“可选持久化”，只有配置 `DATABASE_URL` 后才会启用 SQLite 或 Neon/Postgres 落库
+- 当前反馈页前端已展示总结、建议和每轮复盘，但 `dimensions` 与 `suggestedAnswer` 尚未完整透出
 
 下一阶段计划：
 
 - 用真实凭证完成 `system interviewer -> 豆包` 联调
 - 用真实凭证完成 `avatar interviewer -> SecondMe Visitor Chat` 联调
-- 验证 SQLite / Neon 持久化、面试官 skill 入库与题库入库策略
+- 验证 SQLite / Neon 持久化、面试官 skill 入库与数据库题库维护策略
 - 视情况再升级到更正式的数据库方案
 
 ## 本地运行
@@ -117,6 +124,10 @@ cp .env.example .env
 - 配置面试官类型、provider、名称、描述、头像、标签、支持岗位和支持模式
 - 直接输入 skill 文本，或上传 `.txt` / `.md` 文件导入 skill
 - 写入 SecondMe 目标分身 `sk-...`，页面只显示脱敏结果，不回显完整 key
+- 维护“面试官专属题库”，推荐直接录专业八股题，格式为 `题目 | 参考答案 | 标签`
+- 阶段支持直接写中文，如：`背景介绍`、`基础能力`、`项目深挖`、`系统设计`、`行为追问`、`总结收口`
+- 单独维护“通用兜底题库”，不会被某个面试官的编辑覆盖
+- 支持按岗位读取和保存通用题库：`GET/PUT /api/v1/admin/question-bank/global`
 
 注意：
 
@@ -158,6 +169,38 @@ ON CONFLICT (interviewer_id) DO UPDATE SET
 - `skill_prompt` 是 Interview Hub 自己传给模型的面试官规则，会优先拼进系统面试官或 AI 分身面试官 prompt
 - `avatar_api_key` 是访问目标 SecondMe 分身的 `sk-...`；如果这一列为空，后端会继续回退到 `interviewer_secrets`，再回退到 `.env` 的 `SECONDME_AVATAR_API_KEY`
 - `interviewers` 表是 catalog 同步表，不建议手动改；手动维护请优先使用 `interviewer_profiles`
+- 如果通过问卷创建面试官，默认 `interviewer_id` 形如 `questionnaire_<role>_<username>`
+
+## 数据库出题规则
+
+- 当前运行时不再调用豆包或 SecondMe 来“生成下一题”
+- 当前初版采用更轻的固定流程：
+  - 第一题走通用开场题
+  - 中间轮次统一走“专业题库 / 八股题”
+  - 最后一题走通用收尾题（当总轮次大于等于 3 时）
+- 选题顺序固定为：
+  - 开场题和收尾题优先走全局通用题库
+  - 中间专业题先查当前面试官自己的 `formal_question_bank`
+  - 若专业题不足，再查同岗位的全局 `formal_question_bank(scope=global)`
+- 同一场面试内不会重复使用同一题；实际使用记录会写入 `formal_question_usage`
+- provider 仍然保留，但当前主要用于反馈生成或后续扩展，不再作为出题来源
+- 默认后端通用八股题库已扩展为 6 组 60 题：Java/语言基础、MySQL、Redis、计算机网络与系统、分布式与微服务、算法与数据结构
+- 默认 `secondme_tech` 也带有 3 道示例专属题，用于验证“面试官专属题库优先、通用题库兜底”的运行逻辑
+
+## 管理接口
+
+- `GET /api/v1/admin/interviewers`
+  - 读取系统面试官和数据库面试官
+- `POST /api/v1/admin/interviewers`
+  - 新增或按 `id` 覆盖面试官 profile
+- `PUT /api/v1/admin/interviewers/{interviewer_id}`
+  - 更新指定面试官
+- `DELETE /api/v1/admin/interviewers/{interviewer_id}`
+  - 删除指定面试官
+- `GET /api/v1/admin/question-bank/global?role=<role>`
+  - 读取指定岗位的通用题库
+- `PUT /api/v1/admin/question-bank/global`
+  - 覆盖指定岗位的通用题库
 
 3. 安装依赖并运行：
 
@@ -182,6 +225,10 @@ uvicorn app.main:app --reload
 - 前端默认可以通过 `http://127.0.0.1:5173` 或 `http://localhost:5173` 直接调用这个后端
 - 如果后续切到 Visitor Chat 匿名模式，终端用户不需要登录 SecondMe，但后端需要先通过开发者应用身份换取 app token
 - 当前 question bank 仍是 MVP 入库形态，已支持通用题沉淀，但尚未接入题目复用/检索策略
+- 当前 question bank 已拆成两层：
+  - `question_bank`：历史留痕/兼容旧逻辑
+  - `formal_question_bank`：正式运行时题库
 - 当前后端会优先从数据库 `interviewer_profiles` 表读取 `avatar_api_key`；如果查不到，会回退到 `interviewer_secrets`，最后回退到 `SECONDME_AVATAR_API_KEY`
 - 当前 OAuth 同步不是主流程：真实检查显示 OAuth token 与 user/info 不直接返回 `sk-...`，后续若要自动绑定用户分身，需要平台侧生成/查询 avatar key 的正式接口与权限
 - 隐藏管理台已补齐基础 CRUD；后续需要补正式鉴权、批量导入、测试 key / 生产 key 区分和操作审计
+- 当前实时通道会过滤发给分身的内部 prompt 和回显片段，避免 prompt 泄漏到 `/api/v1/interview-sessions` 的题目内容里

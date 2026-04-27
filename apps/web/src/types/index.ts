@@ -19,6 +19,15 @@ export const SESSION_STATUSES = [
 ] as const;
 
 export const MESSAGE_ROLES = ["assistant", "user"] as const;
+export const INTERVIEW_STAGE_KEYS = [
+  "intro",
+  "fundamentals",
+  "project",
+  "system_design",
+  "behavioral",
+  "closing",
+] as const;
+export const QUESTION_BANK_SCOPE_TYPES = ["interviewer", "global"] as const;
 
 export const REQUEST_STATUSES = ["idle", "loading", "success", "error"] as const;
 
@@ -30,6 +39,8 @@ export type InterviewerType = (typeof INTERVIEWER_TYPES)[number];
 export type InterviewerProvider = (typeof INTERVIEWER_PROVIDERS)[number];
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 export type MessageRole = (typeof MESSAGE_ROLES)[number];
+export type InterviewStageKey = (typeof INTERVIEW_STAGE_KEYS)[number];
+export type QuestionBankScopeType = (typeof QUESTION_BANK_SCOPE_TYPES)[number];
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 export type InterviewStage = (typeof INTERVIEW_STAGES)[number];
 
@@ -76,6 +87,30 @@ export interface AdminInterviewer extends Interviewer {
   avatarApiKey?: string | null;
   avatarApiKeyMasked?: string | null;
   updatedAt?: string | null;
+  ownedQuestions: AdminQuestionBankQuestion[];
+}
+
+export interface AdminQuestionBankQuestion {
+  id: string;
+  scopeType: QuestionBankScopeType;
+  interviewerId?: string | null;
+  role: InterviewRole;
+  stageKey: InterviewStageKey;
+  question: string;
+  referenceAnswer?: string | null;
+  tags: string[];
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export interface UpsertQuestionBankQuestionRequest {
+  role: InterviewRole;
+  stageKey: InterviewStageKey;
+  question: string;
+  referenceAnswer?: string | null;
+  tags: string[];
+  enabled: boolean;
+  sortOrder?: number | null;
 }
 
 export interface UpsertAdminInterviewerRequest {
@@ -95,6 +130,17 @@ export interface UpsertAdminInterviewerRequest {
   interviewFlow?: string | null;
   avatarApiKey?: string | null;
   enabled: boolean;
+  ownedQuestions?: UpsertQuestionBankQuestionRequest[] | null;
+}
+
+export interface GlobalQuestionBankResponse {
+  role: InterviewRole;
+  questions: AdminQuestionBankQuestion[];
+}
+
+export interface UpsertGlobalQuestionBankRequest {
+  role: InterviewRole;
+  questions: UpsertQuestionBankQuestionRequest[];
 }
 
 export interface Session {

@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 
 import { adminApi } from "../services/api";
 import {
+  parseQuestionBankText,
+  questionBankTextareaHint,
+  serializeQuestionBankText,
+} from "../config/questionBank";
+import {
   INTERVIEWER_PROVIDERS,
   INTERVIEWER_TYPES,
   type AdminInterviewer,
@@ -10,6 +15,7 @@ import {
   type InterviewRole,
   type InterviewerProvider,
   type InterviewerType,
+  type UpsertGlobalQuestionBankRequest,
   type UpsertAdminInterviewerRequest,
 } from "../types";
 import { modeOptions, roleOptions } from "../config/interviewOptions";
@@ -33,6 +39,7 @@ interface AdminFormState {
   interviewFlow: string;
   avatarApiKey: string;
   enabled: boolean;
+  ownedQuestionsText: string;
 }
 
 const providerLabels: Record<InterviewerProvider, string> = {
@@ -63,6 +70,7 @@ const emptyForm = (): AdminFormState => ({
   interviewFlow: "",
   avatarApiKey: "",
   enabled: true,
+  ownedQuestionsText: "",
 });
 
 const formFromInterviewer = (interviewer: AdminInterviewer): AdminFormState => ({
@@ -82,6 +90,7 @@ const formFromInterviewer = (interviewer: AdminInterviewer): AdminFormState => (
   interviewFlow: interviewer.interviewFlow ?? "",
   avatarApiKey: interviewer.avatarApiKey ?? "",
   enabled: interviewer.enabled,
+  ownedQuestionsText: serializeQuestionBankText(interviewer.ownedQuestions ?? []),
 });
 
 const splitTags = (value: string) =>
@@ -115,6 +124,11 @@ export const AdminInterviewersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isAvatarKeyVisible, setIsAvatarKeyVisible] = useState(false);
+  const [globalRole, setGlobalRole] = useState<InterviewRole>("backend");
+  const [globalQuestionsText, setGlobalQuestionsText] = useState("");
+  const [globalRequestState, setGlobalRequestState] = useState<"idle" | "loading" | "saving">("idle");
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [globalNotice, setGlobalNotice] = useState<string | null>(null);
   const initialLoadStartedRef = useRef(false);
   const loadPromiseRef = useRef<Promise<AdminInterviewer[]> | null>(null);
 
@@ -123,6 +137,19 @@ export const AdminInterviewersPage = () => {
     [interviewers, selectedId],
   );
   const hasFullAvatarApiKey = form.avatarApiKey.trim().length > 0;
+
+  const loadGlobalQuestionBank = async (role: InterviewRole) => {
+    setGlobalRequestState("loading");
+    setGlobalError(null);
+    try {
+      const response = await adminApi.getGlobalQuestionBank(role);
+      setGlobalQuestionsText(serializeQuestionBankText(response.data.questions));
+    } catch (currentError) {
+      setGlobalError(currentError instanceof Error ? currentError.message : "通用题库读取失败。");
+    } finally {
+      setGlobalRequestState("idle");
+    }
+  };
 
   const loadInterviewers = async () => {
     if (loadPromiseRef.current) {
@@ -160,7 +187,15 @@ export const AdminInterviewersPage = () => {
     }
     initialLoadStartedRef.current = true;
     void loadInterviewers();
+    void loadGlobalQuestionBank(globalRole);
   }, []);
+
+  useEffect(() => {
+    if (!initialLoadStartedRef.current) {
+      return;
+    }
+    void loadGlobalQuestionBank(globalRole);
+  }, [globalRole]);
 
   const selectInterviewer = (interviewer: AdminInterviewer) => {
     setSelectedId(interviewer.id);
@@ -228,6 +263,7 @@ export const AdminInterviewersPage = () => {
     interviewFlow: form.interviewFlow.trim() || null,
     avatarApiKey: form.avatarApiKey.trim() || null,
     enabled: form.enabled,
+    ownedQuestions: parseQuestionBankText(form.ownedQuestionsText, form.supportedRoles[0] ?? "backend"),
   });
 
   const saveInterviewer = async () => {
@@ -252,6 +288,25 @@ export const AdminInterviewersPage = () => {
       setError(currentError instanceof Error ? currentError.message : "保存失败。");
     } finally {
       setRequestState("idle");
+    }
+  };
+
+  const saveGlobalQuestionBank = async () => {
+    setGlobalRequestState("saving");
+    setGlobalError(null);
+    setGlobalNotice(null);
+    try {
+      const payload: UpsertGlobalQuestionBankRequest = {
+        role: globalRole,
+        questions: parseQuestionBankText(globalQuestionsText, globalRole),
+      };
+      const response = await adminApi.updateGlobalQuestionBank(payload);
+      setGlobalQuestionsText(serializeQuestionBankText(response.data.questions));
+      setGlobalNotice("已更新通用兜底题库。");
+    } catch (currentError) {
+      setGlobalError(currentError instanceof Error ? currentError.message : "通用题库保存失败。");
+    } finally {
+      setGlobalRequestState("idle");
     }
   };
 
@@ -569,6 +624,20 @@ export const AdminInterviewersPage = () => {
                   onChange={(event) => updateForm({ interviewFlow: event.target.value })}
                 />
               </Field>
+
+              <Field
+                label="面试官专属题库"
+                hint={`${questionBankTextareaHint}。初版建议直接录专业八股题；自我介绍和收尾由通用题库统一提供。`}
+              >
+                <textarea
+                  className="admin-textarea min-h-72 font-mono text-sm"
+                  value={form.ownedQuestionsText}
+                  placeholder={
+                    "请解释一下 Redis 为什么快？ | 优秀回答应覆盖内存、数据结构、IO 模型和使用场景。 | Redis,缓存\nMySQL 索引为什么会失效？ | 优秀回答应讲清常见失效场景和排查方法。 | MySQL,索引"
+                  }
+                  onChange={(event) => updateForm({ ownedQuestionsText: event.target.value })}
+                />
+              </Field>
             </div>
 
             <div className="space-y-4">
@@ -623,6 +692,70 @@ export const AdminInterviewersPage = () => {
               </Field>
             </div>
           </div>
+
+          <section className="mt-6 rounded-[1.75rem] border border-slate-900/10 bg-white/70 p-5">
+            <div className="flex flex-col gap-3 border-b border-slate-900/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-slate-500">Global Fallback Bank</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">通用兜底题库</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  这块题库不会跟某个面试官绑定。当专属题库不够时，运行时会按岗位和阶段从这里补题。
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  className="admin-input min-w-[180px]"
+                  value={globalRole}
+                  onChange={(event) => {
+                    setGlobalRole(event.target.value as InterviewRole);
+                    setGlobalNotice(null);
+                    setGlobalError(null);
+                  }}
+                >
+                  {roleOptions.map((role) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:-translate-y-0.5 disabled:opacity-50"
+                  disabled={globalRequestState === "saving"}
+                  onClick={() => {
+                    void saveGlobalQuestionBank();
+                  }}
+                  type="button"
+                >
+                  {globalRequestState === "saving" ? "保存中..." : "保存通用题库"}
+                </button>
+              </div>
+            </div>
+
+            {globalNotice ? (
+              <div className="mt-4 rounded-3xl border border-emerald-700/20 bg-emerald-100 p-4 text-sm font-semibold text-emerald-900">
+                {globalNotice}
+              </div>
+            ) : null}
+
+            {globalError ? (
+              <div className="mt-4 rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                {globalError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-3">
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">{questionBankTextareaHint}</p>
+              <textarea
+                className="admin-textarea min-h-72 font-mono text-sm"
+                value={globalQuestionsText}
+                placeholder="背景介绍 | 请先做一个简短的自我介绍，并介绍一个最近相关项目。\n请解释一下一个你最熟悉的专业基础知识点。"
+                onChange={(event) => setGlobalQuestionsText(event.target.value)}
+              />
+              {globalRequestState === "loading" ? (
+                <p className="text-sm font-semibold text-slate-500">正在读取当前岗位的通用题库...</p>
+              ) : null}
+            </div>
+          </section>
         </section>
       </div>
     </main>

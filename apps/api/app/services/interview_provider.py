@@ -25,9 +25,7 @@ from app.repositories.persistence import PersistenceRepository
 from app.services.doubao_client import DoubaoClient
 from app.services.feedback import FeedbackService
 from app.services.interview_prompts import (
-  build_avatar_bootstrap_prompt,
   build_avatar_follow_up_prompt,
-  build_system_bootstrap_prompt,
   build_system_follow_up_prompt,
 )
 from app.services.realtime import SecondMeRealtimeChannel
@@ -63,6 +61,7 @@ class InterviewProvider(Protocol):
     runtime: SessionRuntime,
     channel: Optional[SecondMeRealtimeChannel],
     answer: str,
+    messages: List[ConversationMessage],
   ) -> str:
     ...
 
@@ -160,31 +159,19 @@ class LegacySecondMeInterviewProvider:
         avatar_id=avatar_id,
         session_id=secondme_session_id,
       )
-      prompt = build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds)
-      await self._secondme_client.send_message(
-        visitor_token=auth.visitor_token,
-        visitor_id=auth.visitor_id,
-        session_id=secondme_session_id,
-        visitor_user_id=auth.visitor_user_id,
-        mind_id=chat.mind_id,
-        ws_id=socket.ws_id,
-        content=prompt,
-        index=0,
-      )
-      first_question_text = await channel.wait_for_reply(ignored_texts=[prompt])
     except Exception:
       await channel.close()
       raise
 
     return ProviderBootstrapResult(
-      first_question_text=first_question_text,
+      first_question_text="",
       runtime=SecondMeLegacyRuntime(
         provider=self.provider_name,
         secondme_session_id=secondme_session_id,
         auth=auth,
         chat=chat,
         socket=socket,
-        next_index=1,
+        next_index=0,
       ),
       channel=channel,
     )
@@ -196,7 +183,9 @@ class LegacySecondMeInterviewProvider:
     runtime: SessionRuntime,
     channel: Optional[SecondMeRealtimeChannel],
     answer: str,
+    messages: List[ConversationMessage],
   ) -> str:
+    _ = messages
     if not isinstance(runtime, SecondMeLegacyRuntime) or channel is None:
       raise UpstreamServiceError("SecondMe Legacy 运行时缺失，无法继续面试。", code="SECONDME_LEGACY_RUNTIME_ERROR")
 
@@ -320,21 +309,9 @@ class SecondMeVisitorInterviewProvider:
       reply_timeout_seconds=self._websocket_reply_timeout_seconds,
     )
     await channel.connect(chat.ws_url)
-    try:
-      prompt = build_avatar_bootstrap_prompt(interviewer, role, mode, total_rounds)
-      await self._visitor_client.send_message(
-        access_token=chat.access_token,
-        session_id=chat.session_id,
-        avatar_api_key=avatar_api_key,
-        message=prompt,
-      )
-      first_question_text = await channel.wait_for_reply(ignored_texts=[prompt])
-    except Exception:
-      await channel.close()
-      raise
 
     return ProviderBootstrapResult(
-      first_question_text=first_question_text,
+      first_question_text="",
       runtime=SecondMeVisitorChatRuntime(
         provider=self.provider_name,
         session_id=chat.session_id,
@@ -353,7 +330,9 @@ class SecondMeVisitorInterviewProvider:
     runtime: SessionRuntime,
     channel: Optional[SecondMeRealtimeChannel],
     answer: str,
+    messages: List[ConversationMessage],
   ) -> str:
+    _ = messages
     if not isinstance(runtime, SecondMeVisitorChatRuntime) or channel is None:
       raise UpstreamServiceError("SecondMe Visitor Chat 运行时缺失，无法继续面试。", code="SECONDME_VISITOR_RUNTIME_ERROR")
 
@@ -457,21 +436,9 @@ class DoubaoInterviewProvider:
     mode: InterviewMode,
     total_rounds: int,
   ) -> ProviderBootstrapResult:
-    first_question_text = await self._doubao_client.chat(
-      messages=[
-        {
-          "role": "system",
-          "content": "你是一位专业、直接、表达清晰的中文模拟面试官。",
-        },
-        {
-          "role": "user",
-          "content": build_system_bootstrap_prompt(interviewer, role, mode, total_rounds),
-        },
-      ],
-      max_tokens=384,
-    )
+    _ = (interviewer, role, mode, total_rounds)
     return ProviderBootstrapResult(
-      first_question_text=first_question_text,
+      first_question_text="",
       runtime=DoubaoRuntime(provider=self.provider_name, model=self._doubao_client.model),
       channel=None,
     )
@@ -483,6 +450,7 @@ class DoubaoInterviewProvider:
     runtime: SessionRuntime,
     channel: Optional[SecondMeRealtimeChannel],
     answer: str,
+    messages: List[ConversationMessage],
   ) -> str:
     _ = (runtime, channel)
     return await self._doubao_client.chat(
@@ -500,6 +468,7 @@ class DoubaoInterviewProvider:
             next_round=session.currentRound + 1,
             total_rounds=session.totalRounds,
             answer=answer,
+            messages=messages,
           ),
         },
       ],
@@ -525,7 +494,7 @@ class DoubaoInterviewProvider:
           "content": self._feedback_service.build_feedback_prompt(session, messages),
         },
       ],
-      max_tokens=1800,
+      max_tokens=3200,
     )
     try:
       return self._feedback_service.parse_feedback(session, messages, raw_feedback)
@@ -543,7 +512,7 @@ class DoubaoInterviewProvider:
             "content": self._feedback_service.build_repair_prompt(session, messages, raw_feedback),
           },
         ],
-        max_tokens=1800,
+        max_tokens=3200,
       )
       return self._feedback_service.parse_feedback(session, messages, repaired_feedback)
 
