@@ -27,6 +27,7 @@ apps/api
 - 已补隐藏管理台 `/admin/interviewers`，可通过页面维护面试官资料、类型、skill 文本、访问 key 和专属题库
 - 已补通用兜底题库管理入口：当面试官专属题库不足时，运行时会自动从全局题库补题
 - 已补隐藏问卷 `/interviewer-questionnaire`：支持面试官姓名、稳定用户名、专属题库文本录入，并按用户名生成稳定 `interviewer_id`
+- 问卷不再自动生成面试官专属题库，初版由面试官自己上传或粘贴专业题
 - 已修复 SecondMe 实时通道 prompt 回显问题，避免内部 prompt 被误展示为面试题
 - 已补真实页面路由：`/`、`/setup`、`/interview`、`/feedback`
 - 通过内存仓储保存 session / messages / feedback
@@ -39,6 +40,7 @@ apps/api
 - 当前已补 `Visitor Chat` 与豆包的代码骨架，但尚未用真实凭证完成外部联调
 - 当前数据库为“可选持久化”，只有配置 `DATABASE_URL` 后才会启用 SQLite 或 Neon/Postgres 落库
 - 当前反馈页前端已展示总结、建议和每轮复盘，但 `dimensions` 与 `suggestedAnswer` 尚未完整透出
+- 当前数据库出题策略已经收敛为轻量 MVP：通用开场题 + 专业题库 + 通用收尾题
 
 下一阶段计划：
 
@@ -186,6 +188,9 @@ ON CONFLICT (interviewer_id) DO UPDATE SET
 - provider 仍然保留，但当前主要用于反馈生成或后续扩展，不再作为出题来源
 - 默认后端通用八股题库已扩展为 6 组 60 题：Java/语言基础、MySQL、Redis、计算机网络与系统、分布式与微服务、算法与数据结构
 - 默认 `secondme_tech` 也带有 3 道示例专属题，用于验证“面试官专属题库优先、通用题库兜底”的运行逻辑
+- 初版推荐的运营方式是：
+  - 通用题库维护固定开场题和固定收尾题
+  - 面试官专属题库只维护专业题，不要求细分复杂阶段
 
 ## 管理接口
 
